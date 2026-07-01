@@ -67,13 +67,17 @@ async function getCachedConfig(conn) {
  * @returns {string} Fecha en formato "YYYY-MM-DD"
  */
 function calcularProximoPago(diaSemanaObjetivo) {
-  const hoy = new Date();
-  const diaHoy = hoy.getDay();
+  // Día calendario en Caracas (mismo criterio que bcvVigenciaVe.ymdCaracas en el resto del sistema).
+  const ymd = require('../utils/bcvVigenciaVe').ymdCaracas(); // 'YYYY-MM-DD'
+  const base = new Date(`${ymd}T00:00:00`); // medianoche local sobre ese día
+  const diaHoy = base.getDay();
   let diasHasta = diaSemanaObjetivo - diaHoy;
   if (diasHasta <= 0) diasHasta += 7;
-  const fecha = new Date(hoy);
-  fecha.setDate(hoy.getDate() + diasHasta);
-  return fecha.toISOString().split('T')[0];
+  base.setDate(base.getDate() + diasHasta);
+  const y = base.getFullYear();
+  const m = String(base.getMonth() + 1).padStart(2, '0');
+  const d = String(base.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /**

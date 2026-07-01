@@ -550,6 +550,18 @@ async function create(req, res) {
     const factorBruto =
       (sumLineNet * (1 - descuento_porcentaje / 100) - descuento_monto_usd) / sumLineNet;
     if (factorBruto < 0) throw httpError(400, 'El descuento de cabecera deja el total negativo');
+    // Descuentos no negativos (evita inflar el cobro con factorBruto > 1).
+    if (descuento_porcentaje < 0 || descuento_monto_usd < 0) {
+      throw httpError(400, 'Los descuentos no pueden ser negativos');
+    }
+    // Tope del rol sobre el descuento EFECTIVO total (%-cabecera + monto fijo), no solo el %.
+    const descEfectivoPct = sumLineNet > 0 ? (1 - factorBruto) * 100 : 0;
+    if (descEfectivoPct > descuentoMaxPermitido + 1e-9) {
+      throw httpError(
+        400,
+        `El descuento total (${descEfectivoPct.toFixed(2)}%) supera el máximo permitido para su rol (${descuentoMaxPermitido}%)`
+      );
+    }
 
     let discountedNet = 0;
     let iva_monto_usd = 0;
