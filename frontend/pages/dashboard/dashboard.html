@@ -30,7 +30,7 @@
     </div>
     <div class="dash-ctx-divider" aria-hidden="true"></div>
     <div class="dash-ctx-seg">
-      <span class="dash-ctx-label">Venta hoy · $ BCV</span>
+      <span class="dash-ctx-label" data-dash-unit-ctx>Venta hoy · $ BCV</span>
       <span class="dash-ctx-val dash-ctx-val--accent" data-dash-hoy-monto>$ 0,00 BCV</span>
       <span class="dash-ctx-sub">
         <span data-dash-hoy-tickets>0 ventas</span>
@@ -51,14 +51,14 @@
   <div class="dash-kpis">
 
     <div class="dash-kpi-card dash-kpi-card--critico" data-dash-tier="gerencial">
-      <p class="dk-label">Deuda vencida <span class="dk-unit">$ BCV</span></p>
+      <p class="dk-label">Deuda vencida <span class="dk-unit" data-dash-unit>$ BCV</span></p>
       <p class="dk-valor dk-valor--danger" data-dash-deuda-total>$ 0,00 BCV</p>
       <p class="dk-pie" data-dash-deuda-sub>Total cartera vencida</p>
       <p class="dk-pie dk-pie--partial" data-dash-deuda-partial style="display:none"></p>
     </div>
 
     <div class="dash-kpi-card" data-dash-tier="gerencial">
-      <p class="dk-label">Ganancia de hoy <span class="dk-unit">$ BCV</span></p>
+      <p class="dk-label">Ganancia de hoy <span class="dk-unit" data-dash-unit>$ BCV</span></p>
       <p class="dk-valor dk-valor--success" data-dash-ganancia>$ 0,00 BCV</p>
       <p class="dk-pie dk-pie--cashea" data-dash-cashea-nota data-cashea-enrich-text="Incluye descuento comisión Cashea" style="display:none">Incluye descuento comisión Cashea</p>
       <p class="dk-pie dk-pie--muted" data-dash-cashea-resumen style="display:none"></p>
@@ -71,13 +71,13 @@
     </div>
 
     <div class="dash-kpi-card dash-kpi-card--info">
-      <p class="dk-label">Últimos 7 días <span class="dk-unit">$ BCV</span></p>
+      <p class="dk-label">Últimos 7 días <span class="dk-unit" data-dash-unit>$ BCV</span></p>
       <p class="dk-valor" data-dash-semana>$ 0,00 BCV</p>
       <p class="dk-pie" data-dash-semana-pie>7 días calendario</p>
     </div>
 
     <div class="dash-kpi-card dash-kpi-card--info">
-      <p class="dk-label">Este mes <span class="dk-unit">$ BCV</span></p>
+      <p class="dk-label">Este mes <span class="dk-unit" data-dash-unit>$ BCV</span></p>
       <p class="dk-valor" data-dash-mes>$ 0,00 BCV</p>
       <p class="dk-pie" data-dash-mes-pie>Mes en curso</p>
     </div>
@@ -103,7 +103,7 @@
       <div class="dash-panel" data-dash-tier="gerencial">
         <div class="dash-panel-head">
           <h3>Ventas por hora — hoy vs ayer</h3>
-          <span class="dash-panel-sub">$ BCV</span>
+          <span class="dash-panel-sub" data-dash-unit>$ BCV</span>
         </div>
         <div class="dash-chart-wrap dash-chart-wrap--sm">
           <canvas id="dash-chart-horas" aria-label="Ventas por hora" role="img"></canvas>
@@ -113,7 +113,7 @@
       <div class="dash-panel">
         <div class="dash-panel-head">
           <h3>Últimas ventas del día</h3>
-          <span class="dash-panel-sub">$ BCV</span>
+          <span class="dash-panel-sub" data-dash-unit>$ BCV</span>
         </div>
         <div class="dash-panel-body" data-dash-ultimas-ventas>
           <p class="dash-estado">Cargando...</p>
@@ -148,7 +148,7 @@
       <div class="dash-panel" data-dash-tier="gerencial">
         <div class="dash-panel-head">
           <h3>Top productos (30 días)</h3>
-          <span class="dash-panel-sub">$ BCV</span>
+          <span class="dash-panel-sub" data-dash-unit>$ BCV</span>
         </div>
         <div class="dash-panel-body" data-dash-top-productos>
           <p class="dash-estado">Cargando...</p>

@@ -27,8 +27,24 @@
     });
   }
 
+  /** Modo monetario operativo ('multimoneda' | 'solo_bcv'). Default multimoneda. */
+  function modoMoneda() {
+    if (window.NexusComponents && typeof window.NexusComponents.getModoMoneda === 'function') {
+      return window.NexusComponents.getModoMoneda();
+    }
+    try {
+      return localStorage.getItem('nexus_modo_moneda') === 'solo_bcv' ? 'solo_bcv' : 'multimoneda';
+    } catch (e) { return 'multimoneda'; }
+  }
+  /** Sufijo de moneda del tablero: 'BCV' en multimoneda, 'USD' en solo BCV. */
+  function sufijoMoneda() {
+    return modoMoneda() === 'solo_bcv' ? 'USD' : 'BCV';
+  }
   function bcv(v) {
-    return '$ ' + formatRefUsdBcvVe(v) + ' BCV';
+    var num = formatRefUsdBcvVe(v);
+    return modoMoneda() === 'solo_bcv'
+      ? '$' + num + ' USD'
+      : '$ ' + num + ' BCV';
   }
 
   /** Monto en bolívares (ref. $ BCV × tasa BCV del día). */
@@ -147,6 +163,17 @@
     hostEl.querySelectorAll('[data-dash-tier="caja"]').forEach(function (el) {
       el.hidden = !canCaja();
     });
+  }
+
+  /** Actualiza las etiquetas de unidad estáticas ("$ BCV"/"$ USD") según el modo. */
+  function aplicarSufijoUnidades() {
+    if (!hostEl) return;
+    var suf = sufijoMoneda();
+    hostEl.querySelectorAll('[data-dash-unit]').forEach(function (el) {
+      el.textContent = '$ ' + suf;
+    });
+    var ctx = hostEl.querySelector('[data-dash-unit-ctx]');
+    if (ctx) ctx.textContent = 'Venta hoy · $ ' + suf;
   }
 
   /* ─── Saludo / fecha ─────────────────────────────────────────── */
@@ -319,14 +346,14 @@
 
     var theme = chartTheme();
     var elUnit = q('[data-dash-chart7d-unit]');
-    if (elUnit) elUnit.textContent = 'ref. $ BCV por venta';
+    if (elUnit) elUnit.textContent = 'ref. $ ' + sufijoMoneda() + ' por venta';
 
     chart7d = new window.Chart(canvas.getContext('2d'), {
       type: 'bar',
       data: {
         labels: labels,
         datasets: [{
-          label: 'Ventas ($ BCV)',
+          label: 'Ventas ($ ' + sufijoMoneda() + ')',
           data: datos,
           backgroundColor: datos.map(function (_, idx) {
             return idx === 6 ? theme.income : theme.accentBar;
@@ -768,6 +795,7 @@
 
       renderSaludo();
       applyTierVisibility();
+      aplicarSufijoUnidades();
       renderOtrosCajerosBanner();
 
       // Sincronizar tasas del navbar con el servidor al entrar al dashboard
@@ -798,12 +826,16 @@
       var onThemeChange = function () { refreshChartColors(); };
       window.addEventListener('nexus:themechange', onThemeChange);
 
+      var onModoMoneda = function () { aplicarSufijoUnidades(); runAll(true); };
+      window.addEventListener('nexus:modo-moneda', onModoMoneda);
+
       window.addEventListener('nexus:route', function cleanup() {
         clearInterval(refreshTimer);
         refreshTimer = null;
         destroyCharts();
         window.removeEventListener('nexus:session', onSession);
         window.removeEventListener('nexus:themechange', onThemeChange);
+        window.removeEventListener('nexus:modo-moneda', onModoMoneda);
         window.removeEventListener('nexus:route', cleanup);
       }, { once: true });
     }
