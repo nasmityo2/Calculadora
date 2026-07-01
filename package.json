@@ -16,6 +16,9 @@
     "dist": "node scripts/ensure-icons.js && electron-builder --win",
     "dist:portable": "node scripts/ensure-icons.js && electron-builder --win portable",
     "dist:nsis": "node scripts/ensure-icons.js && electron-builder --win nsis",
+    "dist:x64": "node scripts/ensure-icons.js && electron-builder --win --x64",
+    "dist:ia32": "node scripts/ensure-icons.js && electron-builder --win --ia32",
+    "dist:all": "npm run dist:x64 && npm run dist:ia32",
     "icons": "node scripts/generate-app-icon.js",
     "db:reset": "node scripts/reset-database.js --confirm",
     "postinstall": "electron-builder install-app-deps"
@@ -76,12 +79,14 @@
         {
           "target": "nsis",
           "arch": [
+            "x64",
             "ia32"
           ]
         },
         {
           "target": "portable",
           "arch": [
+            "x64",
             "ia32"
           ]
         }
@@ -118,6 +123,7 @@
     ],
     "extraFiles": [],
     "compression": "maximum",
-    "removePackageScripts": true
+    "removePackageScripts": true,
+    "npmRebuild": true
   }
 }
