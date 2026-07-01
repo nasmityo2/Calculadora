@@ -1,0 +1,300 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden !important;
+  height: 100%;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  height: 100%;
+  min-width: 680px;
+  font-family: var(--font-primary);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Fondo de instrumento: nunca plano. Gradientes radiales sutiles
+   (ámbar arriba-izq, azul info abajo-der) que dan profundidad sin decorar. */
+body {
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 15% -10%, var(--body-gradient-amber) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 85% 110%, var(--body-gradient-info)  0%, transparent 70%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+a {
+  color: var(--text-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Sin spinners nativos en campos numéricos (look limpio, mobile-friendly manual) */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.layout-root {
+  display: flex;
+  height: 100%;
+  min-height: 100vh;
+}
+
+.layout-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--sidebar-width);
+  min-width: 0;
+  min-height: 0;
+}
+
+#navbar-host {
+  flex-shrink: 0;
+}
+
+/* Sin sesión: solo vista de acceso (sin menú ni barra de tasas) */
+.layout-root.layout-guest #sidebar-host,
+.layout-root.layout-guest #navbar-host {
+  display: none !important;
+}
+
+.layout-root.layout-guest .layout-main {
+  margin-left: 0;
+}
+
+.layout-root.layout-guest .view-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: clamp(2rem, 8vh, 4rem);
+}
+
+.view-container {
+  flex: 1;
+  min-height: 0;
+  padding: 1.25rem 1.5rem 2rem;
+  overflow: auto;
+}
+
+.view-container:focus {
+  outline: none;
+}
+
+/* ── Encabezado de página ─────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  line-height: 1.15;
+}
+
+.page-subtitle {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+/* Compatibilidad con páginas antiguas que usan h2 + .page-lead */
+.page-content h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.page-content .page-lead {
+  margin: 0 0 1.25rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── KPI cards ────────────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, transparent 60px);
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-primary);
+}
+
+.kpi-card--blue::before   { background: var(--accent-info); }
+.kpi-card--green::before  { background: var(--accent-success); }
+.kpi-card--yellow::before { background: var(--accent-warning); }
+.kpi-card--red::before    { background: var(--accent-danger);  }
+.kpi-card--purple::before { background: var(--accent-primary); }
+.kpi-card--cyan::before   { background: var(--accent-info); }
+
+.kpi-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-3xl);
+  font-weight: 400;
+  color: var(--text-bright);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.kpi-foot {
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* Compatibilidad con sample antiguo */
+.page-kpi-sample {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  color: var(--accent-primary);
+}
+
+/* ── Responsive layout — ventana no maximizada ──────────────────────── */
+
+/* Pantalla grande pero no al máximo (~1280px) */
+@media (max-width: 1280px) {
+  .view-container {
+    padding: 1rem 1.25rem 1.5rem;
+  }
+}
+
+/* Ventana mediana: sidebar compacto (íconos solos) */
+@media (max-width: 1100px) {
+  :root {
+    --sidebar-width: 64px;
+  }
+  .view-container {
+    padding: 1rem;
+  }
+  .kpi-value {
+    font-size: 1.6rem;
+  }
+}
+
+/* Ventana pequeña */
+@media (max-width: 860px) {
+  :root {
+    --sidebar-width: 52px;
+  }
+  .view-container {
+    padding: 0.75rem;
+  }
+  .page-title {
+    font-size: var(--text-lg);
+  }
+}
+
+/* ── Scrollbar en modo claro ────────────────────────────────── */
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

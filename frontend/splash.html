@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciando Nexus Core</title>
+  <style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;700&family=Barlow+Condensed:wght@700;800&family=DM+Mono:wght@400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Tokens base (dark por defecto) ───────────────────────── */
+  :root,
+  [data-theme="dark"] {
+    --bg-primary:          #05080f;
+    --bg-secondary:        #090d18;
+    --bg-tertiary:         #0d1424;
+    --accent-primary:      #f0a500;
+    --accent-primary-glow: rgba(240, 165, 0, 0.12);
+    --text-primary:        #edf2f7;
+    --text-secondary:      #7a8fa8;
+    --text-muted:          #3d5068;
+    --text-bright:         #ffffff;
+    --border-primary:      #1a2540;
+    --accent-danger:       #ef4444;
+    --surface-danger-bg:     rgba(239, 68, 68, 0.10);
+    --surface-danger-border: rgba(239, 68, 68, 0.30);
+    --body-gradient-amber: rgba(240, 165, 0, 0.040);
+    --body-gradient-info:  rgba(59, 130, 246, 0.030);
+    --font-display:        'Barlow Condensed', sans-serif;
+    --font-ui:             'Sora', system-ui, sans-serif;
+    --font-mono:           'DM Mono', 'JetBrains Mono', monospace;
+  }
+
+  /* ── Tokens modo claro ─────────────────────────────────────── */
+  [data-theme="light"] {
+    --bg-primary:          #f4f6fa;
+    --bg-secondary:        #ffffff;
+    --bg-tertiary:         #eef1f6;
+    --accent-primary:      #f0a500;
+    --accent-primary-glow: rgba(240, 165, 0, 0.14);
+    --text-primary:        #1a2332;
+    --text-secondary:      #5a6d85;
+    --text-muted:          #8fa3b8;
+    --text-bright:         #0d1520;
+    --border-primary:      #d0dae8;
+    --accent-danger:       #dc2626;
+    --surface-danger-bg:     rgba(220, 38, 38, 0.08);
+    --surface-danger-border: rgba(220, 38, 38, 0.28);
+    --body-gradient-amber: rgba(240, 165, 0, 0.045);
+    --body-gradient-info:  rgba(37, 99, 235, 0.030);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg-primary);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 15% -10%, var(--body-gradient-amber) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 85% 110%, var(--body-gradient-info)  0%, transparent 70%);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    overflow: hidden;
+    -webkit-app-region: drag;
+    -webkit-font-smoothing: antialiased;
+  }
+  .splash-container {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; gap: 20px; position: relative;
+  }
+  .splash-container::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent-primary);
+  }
+  .splash-logo {
+    width: 72px; height: 72px; color: var(--accent-primary);
+  }
+  .splash-title {
+    font-family: var(--font-display); font-size: 30px; font-weight: 800;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-bright); line-height: 1;
+  }
+  .splash-sub {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--accent-primary); opacity: 0.85;
+  }
+  .splash-version {
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
+    position: absolute; bottom: 16px;
+  }
+  .splash-status {
+    font-family: var(--font-ui); font-size: 12.5px;
+    color: var(--text-secondary); min-height: 1.25rem; -webkit-app-region: no-drag;
+  }
+  .splash-progress-bar {
+    width: 180px; height: 2px; background: var(--border-primary); border-radius: 2px;
+    overflow: hidden; margin-top: 8px; -webkit-app-region: no-drag;
+  }
+  .splash-progress-fill {
+    height: 100%; width: 0%; background: var(--accent-primary);
+    border-radius: 2px; transition: width 0.3s ease;
+  }
+  .error-container {
+    display: none; padding: 1rem 1.25rem; background: var(--surface-danger-bg);
+    border: 1px solid var(--surface-danger-border); border-radius: var(--radius-md, 6px); margin-top: 1rem;
+    max-width: 420px; text-align: left; -webkit-app-region: no-drag;
+  }
+  .error-container.show { display: block; }
+  .error-title { font-family: var(--font-display); font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.5rem; text-align: center; color: var(--accent-danger); }
+  .error-message { font-size: 0.85rem; line-height: 1.5; word-break: break-word; color: var(--text-secondary); }
+  .tech-log-toggle { display: inline-block; margin-top: 0.75rem; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; text-decoration: underline; }
+  .tech-log {
+    display: none; margin-top: 0.5rem; padding: 0.75rem; background: var(--bg-tertiary);
+    border-radius: 3px; font-family: var(--font-mono); font-size: 0.72rem;
+    line-height: 1.4; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto;
+  }
+  .tech-log.show { display: block; }
+  </style>
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var t = params.get('theme') || localStorage.getItem('nexus_theme') || 'dark';
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        try { localStorage.setItem('nexus_theme', t); } catch (e2) {}
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="splash-container">
+    <svg class="splash-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+      <polygon points="24,6 38,14 38,30 24,38 10,30 10,14" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+      <line x1="38" y1="14" x2="46" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="24" y1="38" x2="24" y2="46" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="10" y1="14" x2="2" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="24" cy="22" r="3" fill="currentColor"/>
+      <line x1="24" y1="14" x2="24" y2="19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <div class="splash-title">Nexus Core</div>
+    <div class="splash-sub">ERP · POS System</div>
+    <div class="splash-status" id="status">Iniciando sistema...</div>
+    <div class="splash-progress-bar"><div class="splash-progress-fill" id="progress"></div></div>
+    <div class="error-container" id="error">
+      <div class="error-title">Error de inicio</div>
+      <div class="error-message" id="error-message"></div>
+      <span class="tech-log-toggle" id="tech-log-toggle" style="display:none;">Ver log técnico</span>
+      <div class="tech-log" id="tech-log"></div>
+    </div>
+    <span class="splash-version" id="splash-version">v0.0.0</span>
+  </div>
+  <script>
+    const bridge = window.splashBridge;
+    bridge.onStatus(function (data) {
+      var statusEl = document.getElementById('status');
+      var progressEl = document.getElementById('progress');
+      if (data.status) statusEl.textContent = data.status;
+      if (data.progress !== undefined) progressEl.style.width = data.progress + '%';
+    });
+    bridge.onError(function (error) {
+      var errorContainer = document.getElementById('error');
+      var errorMessage = document.getElementById('error-message');
+      var techLogEl = document.getElementById('tech-log');
+      var techLogToggle = document.getElementById('tech-log-toggle');
+      errorContainer.classList.add('show');
+      errorMessage.textContent = error.message || 'Error desconocido';
+      if (error.technicalLog && error.technicalLog.trim()) {
+        techLogEl.textContent = error.technicalLog;
+        techLogToggle.style.display = 'inline-block';
+        techLogToggle.addEventListener('click', function () {
+          var isOpen = techLogEl.classList.toggle('show');
+          techLogToggle.textContent = isOpen ? 'Ocultar log técnico' : 'Ver log técnico';
+        });
+      }
+    });
+    setTimeout(function () { bridge.ready(); }, 100);
+  </script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<section class="page-content login-page card">
+  <div class="login-brand">
+    <svg width="36" height="36" viewBox="0 0 48 48" fill="none" style="color:var(--accent-primary);flex-shrink:0" aria-hidden="true">
+      <polygon points="24,6 38,14 38,30 24,38 10,30 10,14" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+      <line x1="38" y1="14" x2="46" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="24" y1="38" x2="24" y2="46" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="10" y1="14" x2="2" y2="8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="24" cy="22" r="3" fill="currentColor"/>
+      <line x1="24" y1="14" x2="24" y2="19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <h1 class="login-brand-name">Nexus Core</h1>
+  </div>
+  <p class="login-meta">
+    ERP / POS — Servidor: <code data-login-api-base style="font-family:var(--font-mono);font-size:.8rem"></code>
+  </p>
+  <form data-login-form id="login-form-main">
+    <div class="login-field">
+      <label for="login-user" class="login-field-label">Usuario</label>
+      <input
+        id="login-user"
+        type="text"
+        name="username"
+        autocomplete="username"
+        class="input-g login-input"
+        required
+      />
+    </div>
+    <div class="login-field login-field--mb-sm">
+      <label for="login-pass" class="login-field-label">Contraseña</label>
+      <div class="login-pass-wrap">
+        <input
+          id="login-pass"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          class="input-g login-input login-pass-input"
+          required
+        />
+        <button type="button" id="login-toggle-pass" tabindex="-1" class="login-pass-toggle" aria-label="Mostrar contraseña">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="login-forgot-link">
+      <button type="button" id="btn-forgot" class="login-forgot-btn">¿Olvidaste tu contraseña?</button>
+    </div>
+    <p data-login-error class="login-error"></p>
+    <button type="submit" class="btn-primary login-submit">Entrar</button>
+  </form>
+
+  <!-- Panel recuperación de contraseña (offline) -->
+  <div id="login-forgot-panel" class="login-forgot-panel">
+    <p class="login-forgot-panel-title">Recuperar acceso</p>
+    <p class="login-forgot-desc">
+      Esta aplicación funciona sin conexión a internet. Para restablecer una contraseña:
+    </p>
+    <ul class="login-forgot-list">
+      <li>Pídele al <strong>administrador</strong> que reinicie tu contraseña desde <em>Configuración → Usuarios</em>.</li>
+      <li>Si eres el administrador y perdiste el acceso, ejecuta el script <code>scripts/recuperar_admin.sql</code> con psql para restablecer la contraseña a <code>admin123</code>.</li>
+    </ul>
+    <div id="login-forgot-admin" class="login-forgot-admin">
+      <p class="login-forgot-admin-title">Reinicio rápido (admin)</p>
+      <input type="text" id="forgot-username" placeholder="Usuario a restablecer" class="login-forgot-field">
+      <input type="password" id="forgot-nueva-pass" placeholder="Nueva contraseña (mín. 4 caracteres)" class="login-forgot-field">
+      <input type="text" id="forgot-admin-user" placeholder="Tu usuario de administrador" class="login-forgot-field">
+      <input type="password" id="forgot-admin-pass" placeholder="Tu contraseña de administrador" class="login-forgot-field">
+      <button type="button" id="btn-forgot-submit" class="btn-primary" style="height:38px;padding:0 1rem">Restablecer contraseña</button>
+      <p id="forgot-msg" class="login-forgot-msg"></p>
+    </div>
+    <div class="login-forgot-actions">
+      <button type="button" id="btn-forgot-mostrar-admin" class="btn-secondary" style="height:34px;padding:0 .75rem;font-size:.8rem">Soy administrador</button>
+      <button type="button" id="btn-forgot-cerrar" class="btn-ghost" style="height:34px;padding:0 .75rem;font-size:.8rem">Volver al login</button>
+    </div>
+  </div>
+
+  <script data-page-inline>
+    window.LoginPage = {
+      mount: function (host) {
+        var form  = host.querySelector('[data-login-form]');
+        var errEl = host.querySelector('[data-login-error]');
+        var baseEl = host.querySelector('[data-login-api-base]');
+        if (baseEl && window.NexusAuth) baseEl.textContent = window.NexusAuth.apiBase ? window.NexusAuth.apiBase() : '';
+
+        // Toggle password visibility
+        var toggleBtn = host.querySelector('#login-toggle-pass');
+        var passInput = host.querySelector('#login-pass');
+        if (toggleBtn && passInput) {
+          toggleBtn.addEventListener('click', function () {
+            passInput.type = passInput.type === 'password' ? 'text' : 'password';
+          });
+        }
+
+        // Forgot password panel
+        var btnForgot         = host.querySelector('#btn-forgot');
+        var forgotPanel       = host.querySelector('#login-forgot-panel');
+        var btnForgotCerrar   = host.querySelector('#btn-forgot-cerrar');
+        var btnForgotAdmin    = host.querySelector('#btn-forgot-mostrar-admin');
+        var forgotAdminDiv    = host.querySelector('#login-forgot-admin');
+        var btnForgotSubmit   = host.querySelector('#btn-forgot-submit');
+        var forgotMsg         = host.querySelector('#forgot-msg');
+
+        if (btnForgot && forgotPanel) {
+          btnForgot.addEventListener('click', function () {
+            forgotPanel.style.display = forgotPanel.style.display === 'none' ? 'block' : 'none';
+          });
+        }
+        if (btnForgotCerrar) btnForgotCerrar.addEventListener('click', function () { if (forgotPanel) forgotPanel.style.display = 'none'; });
+        if (btnForgotAdmin && forgotAdminDiv) {
+          btnForgotAdmin.addEventListener('click', function () {
+            forgotAdminDiv.style.display = forgotAdminDiv.style.display === 'none' ? 'block' : 'none';
+          });
+        }
+
+        if (btnForgotSubmit) {
+          btnForgotSubmit.addEventListener('click', function () {
+            var uname      = (host.querySelector('#forgot-username') || {}).value || '';
+            var newPass    = (host.querySelector('#forgot-nueva-pass') || {}).value || '';
+            var adminUser  = (host.querySelector('#forgot-admin-user') || {}).value || '';
+            var adminPas   = (host.querySelector('#forgot-admin-pass') || {}).value || '';
+            if (!uname || !newPass || !adminUser || !adminPas) {
+              if (forgotMsg) { forgotMsg.style.display = 'block'; forgotMsg.style.color = 'var(--accent-danger)'; forgotMsg.textContent = 'Completa todos los campos'; }
+              return;
+            }
+            var apiBase = (window.NexusAuth && window.NexusAuth.apiBase) ? window.NexusAuth.apiBase() : 'http://127.0.0.1:3000';
+            fetch(apiBase + '/api/auth/login', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: adminUser.trim().toLowerCase(), password: adminPas })
+            })
+              .then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw new Error(e.error || 'Admin incorrecto'); }); })
+              .then(function (d) {
+                var token = d.token;
+                return fetch(apiBase + '/api/usuarios?limit=100', { headers: { Authorization: 'Bearer ' + token } })
+                  .then(function (r) { return r.json(); })
+                  .then(function (users) {
+                    var u = users.find(function (x) { return x.username === uname.trim().toLowerCase(); });
+                    if (!u) throw new Error('Usuario "' + uname + '" no encontrado');
+                    return fetch(apiBase + '/api/usuarios/' + u.id + '/cambiar-password', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                      body: JSON.stringify({ password_nuevo: newPass })
+                    });
+                  });
+              })
+              .then(function (r) { return r.ok ? r.json() : r.json().then(function (e) { throw new Error(e.error || 'Error'); }); })
+              .then(function () {
+                if (forgotMsg) { forgotMsg.style.display = 'block'; forgotMsg.style.color = 'var(--accent-success)'; forgotMsg.textContent = 'Contraseña restablecida correctamente. Ya puedes iniciar sesión.'; }
+              })
+              .catch(function (e) {
+                if (forgotMsg) { forgotMsg.style.display = 'block'; forgotMsg.style.color = 'var(--accent-danger)'; forgotMsg.textContent = e.message || 'Error'; }
+              });
+          });
+        }
+
+        if (!form || !window.NexusAuth) {
+          window.dispatchEvent(new CustomEvent('nexus:login-mounted', { detail: { host } }));
+          return;
+        }
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var u = (host.querySelector('#login-user') || {}).value || '';
+          var p = (host.querySelector('#login-pass') || {}).value || '';
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+          window.NexusAuth.login(u, p)
+            .then(function () { window.location.hash = '#/dashboard'; })
+            .catch(function (e) {
+              errEl.textContent = e.message || 'Error de acceso';
+              errEl.style.display = 'block';
+            });
+        });
+
+        window.dispatchEvent(new CustomEvent('nexus:login-mounted', { detail: { host } }));
+      }
+    };
+  </script>
+</section>

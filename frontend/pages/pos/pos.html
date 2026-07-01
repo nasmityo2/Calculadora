@@ -1,0 +1,486 @@
+<section class="page-content pos-page" data-pos-root>
+  <div class="pos-main-grid" id="pos-main-grid">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         COLUMNA IZQUIERDA — catálogo (normal) / resumen cobro
+         ═══════════════════════════════════════════════════════════ -->
+    <aside class="pos-col-catalog">
+
+      <!-- Panel catálogo (modo normal, se oculta en modo cobro) -->
+      <div class="pos-catalog-panel" id="pos-catalog-panel">
+        <div class="pos-catalog-inner" id="pos-catalog-inner">
+
+        <div class="pos-section-sep">Venta</div>
+
+        <!-- Ticket info pequeño -->
+        <div class="pos-doc-row">
+          <span class="pos-doc-time" data-pos-marquee-time>—</span>
+          <span class="pos-doc-ticket" data-pos-marquee-ticket>BORRADOR</span>
+        </div>
+
+        <!-- F1 CLIENTE -->
+        <div class="pos-fblock">
+          <span class="pos-flabel">F1 · Cliente</span>
+          <div
+            class="pos-fbody pos-fbody--cliente"
+            data-pos-cliente-panel
+            role="button"
+            tabindex="0"
+            title="Clic para elegir consumidor final o cliente registrado"
+          >
+            <div class="pos-cliente-aside-row">
+              <span class="pos-cliente-aside-badge" data-pos-cliente-badge aria-hidden="true">CF</span>
+              <div class="pos-cliente-aside-text">
+                <span class="pos-cliente-placeholder" data-pos-cliente-nombre>Consumidor final</span>
+                <span class="pos-cliente-sub" data-pos-cliente-sub>Mostrador · clic para cambiar</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- F2 VENDEDOR -->
+        <div class="pos-fblock">
+          <span class="pos-flabel">F2 · Vendedor</span>
+          <div class="pos-fbody" data-pos-vendedor-panel>—</div>
+        </div>
+
+        <div class="pos-section-sep">Búsqueda</div>
+
+        <!-- F5 BÚSQUEDA -->
+        <div class="pos-fblock pos-fblock--scan">
+          <span class="pos-flabel">F5 · Código / buscar artículo</span>
+          <input
+            type="search"
+            class="pos-scan-input pos-no-scan pos-search-input"
+            placeholder="Escanear o escribir código, barras, nombre…"
+            autocomplete="off"
+            data-pos-search
+          />
+          <p class="pos-scan-hint">Enter añade por código exacto · ↓ baja a resultados</p>
+          <ul class="pos-results-list pos-results-list--aside" data-pos-results></ul>
+        </div>
+
+        </div><!-- /pos-catalog-inner -->
+
+        <!-- Barra inferior fija: descuento + acciones (no scrollea con búsqueda) -->
+        <div class="pos-aside-bottom">
+          <div class="pos-section-sep">Descuento</div>
+
+          <div class="pos-aside-toolbar">
+            <label class="pos-mini-label">Desc. global %</label>
+            <input
+              id="pos-global-disc"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value="0"
+              class="pos-disc-input pos-no-scan"
+              data-pos-global-disc
+            />
+          </div>
+
+          <div class="pos-aside-actions">
+            <button type="button" class="btn btn-ghost" data-pos-suspend>Suspender</button>
+            <button type="button" class="btn btn-ghost" data-pos-suspended-toggle title="Recuperar venta suspendida">
+              Recuperar
+            </button>
+            <button type="button" class="btn btn-icon" data-pos-clear title="Vaciar carrito">✕ Vaciar</button>
+          </div>
+
+          <input
+            type="text"
+            class="form-input pos-no-scan pos-suspend-ref-input"
+            placeholder="Ref. suspensión (opcional)"
+            data-pos-suspend-ref
+          />
+
+          <div class="pos-suspend-bar" data-pos-suspended-bar style="display:none">
+            <select class="form-select pos-no-scan" data-pos-suspended-select>
+              <option value="">— Ventas suspendidas —</option>
+            </select>
+            <button type="button" class="btn btn-ghost" data-pos-suspended-load>Cargar</button>
+          </div>
+        </div>
+
+      </div><!-- /pos-catalog-panel -->
+
+      <!-- Carrito compacto read-only (modo cobro — se llena por JS) -->
+      <div class="pos-cart-compact" id="pos-cart-compact" style="display:none"></div>
+
+    </aside><!-- /pos-col-catalog -->
+
+    <!-- ═══════════════════════════════════════════════════════════
+         COLUMNA DERECHA — panel orden (normal) / panel pago (cobro)
+         ═══════════════════════════════════════════════════════════ -->
+    <main class="pos-col-order">
+
+      <!-- ── PANEL ORDEN (modo normal) ───────────────────────────── -->
+      <div class="pos-order-panel" id="pos-order-panel">
+
+        <!-- PILLS HEADER (3 pills: precio/U · Ítems · Total) -->
+        <div class="pos-pills-header">
+          <div class="pos-pill pos-pill--green">
+            <div class="pos-pill-label">Precio / U</div>
+            <div class="pos-pill-main" data-pos-marquee-precio-bs>Bs. 0,00 (BCV)</div>
+            <div class="pos-pill-sub nexus-usd-only" data-pos-marquee-precio-usd>USD efectivo $0.00</div>
+            <div class="pos-pill-tertiary" data-pos-marquee-precio-usd-bcv>Ref. USD BCV $0,00</div>
+          </div>
+          <div class="pos-pill pos-pill--orange">
+            <div class="pos-pill-label">Ítems</div>
+            <div class="pos-pill-main" data-pos-marquee-items>0</div>
+          </div>
+          <div class="pos-pill pos-pill--red">
+            <div class="pos-pill-label">Total</div>
+            <div class="pos-pill-main" data-pos-total-bs-bcv>Bs. 0,00 (BCV)</div>
+            <div class="pos-pill-sub nexus-usd-only" data-pos-total-usd>USD efectivo $ 0.00</div>
+            <div class="pos-pill-tertiary" data-pos-total-usd-bcv-ref>Ref. USD BCV $0,00</div>
+          </div>
+        </div>
+
+        <!-- Banner caja cerrada (compacto, dentro del panel de orden) -->
+        <div class="pos-caja-banner" data-pos-caja-banner hidden role="status" aria-live="polite"></div>
+
+        <!-- Tabla del carrito (con scroll) -->
+        <div class="pos-cart-sheet">
+          <table class="pos-cart-table pos-cart-table--classic" aria-label="Detalle de la venta">
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th class="num">IVA</th>
+                <th class="num">Precio</th>
+                <th class="num">Cant.</th>
+                <th class="num">Desc.%</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody data-pos-cart-body></tbody>
+          </table>
+        </div>
+
+        <!-- Footer del carrito -->
+        <div class="pos-cart-footer">
+          <div class="pos-footer-subtotals">
+            <span class="pos-footer-line">
+              Total Bs: <strong data-pos-total-bs-usd>0,00</strong>
+            </span>
+            <span class="pos-footer-sep nexus-usd-only">·</span>
+            <span class="pos-footer-line nexus-usd-only">
+              USD: <strong data-pos-total-usd-footer>0.00</strong>
+            </span>
+            <span class="pos-footer-sep nexus-usd-only">·</span>
+            <span class="pos-footer-line nexus-usd-only">
+              Ref.$BCV: <strong data-pos-total-usd-bcv-footer>0,00</strong>
+            </span>
+          </div>
+          <div class="pos-footer-total-row">
+            <span class="pos-footer-total-label">TOTAL BCV</span>
+            <span class="pos-footer-total-amount" data-pos-total-bs-bcv-footer>Bs. 0,00</span>
+          </div>
+          <button type="button" class="pos-cobrar-btn" data-pos-cobrar disabled>
+            COBRAR
+          </button>
+        </div>
+
+      </div><!-- /pos-order-panel -->
+
+      <!-- ── PANEL PAGO (modo cobro — hidden hasta que el cajero pulsa COBRAR) ── -->
+      <div class="pos-pago-panel" id="pos-pago-panel" style="display:none">
+
+        <!-- Banners resumen -->
+        <div class="cobro-banner-row" aria-label="Resumen de la venta">
+          <div class="cobro-banner cobro-banner--green" id="cobro-banner-green">
+            <div class="cobro-banner-label cobro-banner-label--green" id="cobro-banner-green-label" hidden>Total de la venta</div>
+            <div class="cobro-banner-line cobro-banner-line--head" id="cobro-banner-total-usd-bcv">TOTAL $0,00 BCV</div>
+            <div class="cobro-banner-line cobro-banner-line--bs-row" id="cobro-banner-total-bs">Bs. 0,00</div>
+            <div class="cobro-banner-line cobro-banner-line--usd-row nexus-usd-only" id="cobro-banner-total-usd" title="Equivalente USD a tasa USD para cubrir el total BCV">USD $0.00</div>
+          </div>
+          <div class="cobro-banner cobro-banner--yellow" id="cobro-banner-yellow">
+            <div class="cobro-banner-label">Descuento</div>
+            <div class="cobro-banner-line" id="cobro-banner-desc-pct">0.00%</div>
+            <div class="cobro-banner-line" id="cobro-banner-desc-usd">−$0.00</div>
+          </div>
+          <div class="cobro-banner cobro-banner--red" id="cobro-banner-red">
+            <div class="cobro-banner-label" id="cobro-banner-red-label">Total a cobrar (BCV)</div>
+            <div class="cobro-banner-line cobro-banner-line--lg" id="cobro-banner-total-pago">0,00</div>
+            <div class="cobro-banner-line cobro-banner-line--ref-bcv" id="cobro-banner-total-pago-ref" hidden></div>
+          </div>
+        </div>
+
+        <!-- Split: tabla pagos (izq) + numpad (der) -->
+        <div class="cobro-split">
+          <div class="cobro-split-left">
+            <div class="cobro-tabla-wrap">
+              <table class="cobro-tabla-pagos" aria-label="Formas de pago">
+                <thead>
+                  <tr>
+                    <th>Forma de pago</th>
+                    <th class="num" title="Factor para convertir «Su pago» a bolívares BCV">Conversión</th>
+                    <th class="num">Su pago</th>
+                    <th class="num" title="Equivalente en bolívares BCV hacia el total a cobrar">Monto a pagar</th>
+                  </tr>
+                </thead>
+                <tbody id="cobro-tabla-pagos-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="cobro-split-right" id="cobro-split-right">
+            <div class="cobro-numpad-stack" id="cobro-numpad-stack">
+              <label class="cobro-numpad-label" for="cobro-numpad-display">Monto (teclado)</label>
+              <input
+                type="text"
+                readonly
+                id="cobro-numpad-display"
+                class="cobro-numpad-display pos-no-scan"
+                value="0"
+                inputmode="none"
+              />
+              <div class="cobro-keypad" id="cobro-keypad" aria-label="Teclado numérico">
+                <button type="button" class="cobro-key" data-k="7">7</button>
+                <button type="button" class="cobro-key" data-k="8">8</button>
+                <button type="button" class="cobro-key" data-k="9">9</button>
+                <button type="button" class="cobro-key" data-k="4">4</button>
+                <button type="button" class="cobro-key" data-k="5">5</button>
+                <button type="button" class="cobro-key" data-k="6">6</button>
+                <button type="button" class="cobro-key" data-k="1">1</button>
+                <button type="button" class="cobro-key" data-k="2">2</button>
+                <button type="button" class="cobro-key" data-k="3">3</button>
+                <button type="button" class="cobro-key cobro-key--wide" data-k="⌫" title="Retroceso">⌫</button>
+                <button type="button" class="cobro-key" data-k="0">0</button>
+                <button type="button" class="cobro-key" data-k="00">00</button>
+                <button type="button" class="cobro-key" data-k="," title="Decimales">,</button>
+                <button type="button" class="cobro-key cobro-key--danger" data-k="C" title="Borrar">C</button>
+                <button type="button" class="cobro-key cobro-key--ok cobro-key--span2" data-k="OK">OK</button>
+              </div>
+            </div>
+
+            <!-- Tarjeta Cashea (visible solo cuando el método activo es Cashea) -->
+            <div id="cashea-desglose" class="cobro-cashea-card" style="display:none" aria-hidden="true">
+              <div class="cobro-cashea-card-head">
+                <img class="cobro-cashea-card-logo nexus-cashea-icon" src="assets/images/cashea.webp" alt="" width="22" height="22" decoding="async" />
+                <span class="cobro-cashea-card-brand">Cashea</span>
+              </div>
+              <div class="cobro-cashea-card-controls">
+                <div class="cobro-cashea-card-field">
+                  <label class="cobro-cashea-card-label" for="cashea-nivel-cliente">Nivel del cliente</label>
+                  <select id="cashea-nivel-cliente" class="cobro-cashea-card-select pos-no-scan">
+                    <option value="semilla">🌱 Semilla (Lv1)</option>
+                    <option value="raiz">🌿 Raíz (Lv2)</option>
+                    <option value="hoja">🍃 Hoja (Lv3)</option>
+                    <option value="tronco">🪵 Tronco (Lv4)</option>
+                    <option value="arbol">🌳 Árbol (Lv5)</option>
+                    <option value="araguaney">🌼 Araguaney (Lv6)</option>
+                  </select>
+                </div>
+                <div class="cobro-cashea-card-field cobro-cashea-card-field--credito">
+                  <label class="cobro-cashea-card-label" for="cashea-credito-disponible">Crédito Cashea disponible (ref. $ BCV)</label>
+                  <input
+                    type="text"
+                    id="cashea-credito-disponible"
+                    class="cobro-cashea-card-input pos-no-scan"
+                    inputmode="decimal"
+                    placeholder="Ej. 10.0"
+                    autocomplete="off"
+                    aria-describedby="cashea-credito-hint"
+                  />
+                  <p class="cobro-cashea-card-field-hint text-muted" id="cashea-credito-hint">
+                    Línea restante en la app Cashea (referencia USD BCV, no dólar calle)
+                  </p>
+                </div>
+              </div>
+              <div id="cashea-limite-aviso" class="cobro-cashea-limite-aviso" hidden role="status" aria-live="polite"></div>
+              <p class="cobro-cashea-card-pending" id="cashea-card-pending" hidden>Calculando financiamiento…</p>
+              <div class="cobro-cashea-breakdown" id="cashea-breakdown">
+                <div class="cobro-cashea-detail-row">
+                  <span class="cobro-cashea-detail-label">Cuota inicial</span>
+                  <strong class="cobro-cashea-detail-value" id="cashea-line-inicial">—</strong>
+                </div>
+                <div class="cobro-cashea-detail-row">
+                  <span class="cobro-cashea-detail-label">Financiado</span>
+                  <strong class="cobro-cashea-detail-value" id="cashea-line-prestado">—</strong>
+                </div>
+              </div>
+              <p class="cobro-cashea-card-foot text-muted" id="cashea-card-foot">
+                Indica nivel y crédito disponible en la app Cashea.
+              </p>
+            </div><!-- /cashea-desglose -->
+          </div><!-- /cobro-split-right -->
+        </div><!-- /cobro-split -->
+
+        <!-- Footer resumen pagos -->
+        <div class="cobro-resumen-footer">
+          <div class="cobro-resumen-line">
+            <span id="cobro-sum-pagado-label">Su pago (suma en Bs)</span>
+            <strong id="cobro-sum-pagado-bs">0,00</strong>
+          </div>
+          <div class="cobro-resumen-line cobro-resumen-line--saldo" id="cobro-linea-saldo-wrap">
+            <span id="cobro-saldo-label">Cambio / saldo Bs</span>
+            <strong id="cobro-saldo-bs">0,00</strong>
+          </div>
+          <div
+            class="cobro-resumen-line cobro-resumen-line--saldo-refs text-muted"
+            id="cobro-saldo-refs-wrap"
+            style="flex-basis:100%;justify-content:flex-end;flex-wrap:wrap;gap:0.75rem 1.25rem;font-size:0.8rem;margin-top:-0.35rem"
+          >
+            <span>$ BCV: <strong id="cobro-saldo-ref-bcv">—</strong></span>
+            <span class="nexus-usd-only">USD: <strong id="cobro-saldo-usd-calle">—</strong></span>
+          </div>
+        </div>
+
+        <!-- Status bar cobro -->
+        <div class="cobro-status" id="cobro-status">
+          <span id="cobro-status-label">Selecciona una fila e ingresa el monto</span>
+          <span class="cobro-status-amount" id="cobro-status-amount"></span>
+        </div>
+
+        <!-- Opciones PDF / nota -->
+        <label class="cobro-pdf-option">
+          <input type="checkbox" id="pos-cobro-opt-pdf" />
+          <span>Abrir comprobante PDF al cobrar (útil con impresora PDF o térmica)</span>
+        </label>
+        <label class="cobro-pdf-option">
+          <input type="checkbox" id="pos-cobro-opt-nota" />
+          <span>Abrir nota de entrega A4 al cobrar</span>
+        </label>
+
+        <div class="pos-pago-footer-row">
+          <button type="button" class="pos-cobro-cancel-btn" id="pos-cobro-cerrar" aria-label="Cancelar cobro y volver al carrito">
+            ← Cancelar (Esc)
+          </button>
+          <button type="button" class="btn btn-success btn-xl cobro-confirm-btn" id="cobro-btn-confirmar" disabled>
+            Confirmar venta
+          </button>
+        </div>
+
+      </div><!-- /pos-pago-panel -->
+
+    </main><!-- /pos-col-order -->
+
+  </div><!-- /pos-main-grid -->
+</section>
+
+<!-- ═══ MODAL: cliente en la venta (F1 — antes del cobro) ═══ -->
+<div
+  class="pos-cobro-modal-overlay"
+  id="pos-cliente-venta-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="pos-cliente-venta-title"
+>
+  <div class="pos-cobro-modal pos-cliente-venta-modal-inner">
+    <div class="pos-cobro-modal-header pos-cliente-modal-header">
+      <div>
+        <h2 class="pos-cobro-modal-title" id="pos-cliente-venta-title">Cliente en esta venta</h2>
+        <p class="pos-cliente-modal-kicker">F1 · Identificación del comprador</p>
+      </div>
+      <button type="button" class="pos-cobro-close" id="pos-cliente-venta-cerrar" aria-label="Cerrar">✕</button>
+    </div>
+
+    <nav class="pos-cliente-steps" id="pos-cliente-steps" aria-label="Paso del asistente">
+      <span class="pos-cliente-step is-active" data-pos-cliente-step="menu">Opciones</span>
+      <span class="pos-cliente-step-sep" aria-hidden="true">›</span>
+      <span class="pos-cliente-step" data-pos-cliente-step="buscar">Buscar</span>
+      <span class="pos-cliente-step-sep" aria-hidden="true">›</span>
+      <span class="pos-cliente-step" data-pos-cliente-step="nuevo">Registrar</span>
+    </nav>
+
+    <div id="pos-cliente-venta-menu" class="pos-cliente-panel is-visible">
+      <div class="pos-cliente-info-box">
+        <p class="pos-cliente-info-text">
+          La venta sin identificar al comprador es <strong>consumidor final</strong> (mostrador).
+          Asocia un cliente si necesitas crédito, historial o datos en la factura.
+        </p>
+      </div>
+      <div class="pos-cliente-opt-grid">
+        <button type="button" class="pos-cliente-opt-card pos-cliente-opt-card--primary" id="pos-cliente-opt-final">
+          <span class="pos-cliente-opt-kicker">Rápido · sin registro</span>
+          <span class="pos-cliente-opt-title">Consumidor final</span>
+          <span class="pos-cliente-opt-desc">Continuar la venta al mostrador sin asociar un cliente</span>
+        </button>
+        <button type="button" class="pos-cliente-opt-card" id="pos-cliente-opt-buscar">
+          <span class="pos-cliente-opt-kicker">Directorio</span>
+          <span class="pos-cliente-opt-title">Buscar cliente</span>
+          <span class="pos-cliente-opt-desc">Nombre, cédula o teléfono de un cliente ya registrado</span>
+        </button>
+        <button type="button" class="pos-cliente-opt-card" id="pos-cliente-opt-nuevo">
+          <span class="pos-cliente-opt-kicker">Alta rápida</span>
+          <span class="pos-cliente-opt-title">Registrar cliente nuevo</span>
+          <span class="pos-cliente-opt-desc">Crear ficha mínima y usarla en esta venta al guardar</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="pos-cliente-buscar-panel" class="pos-cliente-panel">
+      <div class="pos-cliente-panel-head">
+        <button type="button" class="pos-cliente-back" id="pos-cliente-buscar-volver">← Volver</button>
+        <div class="pos-cliente-panel-head-text">
+          <h3 class="pos-cliente-panel-title">Buscar cliente</h3>
+          <p class="pos-cliente-panel-sub">Escribe al menos 2 caracteres para filtrar el directorio</p>
+        </div>
+      </div>
+      <div class="pos-cliente-search-wrap">
+        <input
+          type="search"
+          id="pos-cliente-buscar-input"
+          class="pos-cliente-search-input pos-no-scan"
+          placeholder="Nombre, cédula o teléfono…"
+          autocomplete="off"
+        />
+      </div>
+      <ul class="pos-cliente-buscar-list" id="pos-cliente-buscar-results" aria-live="polite"></ul>
+    </div>
+
+    <div id="pos-cliente-nuevo-panel" class="pos-cliente-panel">
+      <div class="pos-cliente-panel-head">
+        <button type="button" class="pos-cliente-back" id="pos-cliente-nuevo-volver">← Volver</button>
+        <div class="pos-cliente-panel-head-text">
+          <h3 class="pos-cliente-panel-title">Registrar cliente</h3>
+          <p class="pos-cliente-panel-sub">Datos mínimos para la venta · el resto puedes completarlo en Clientes</p>
+        </div>
+      </div>
+      <div class="pos-cliente-form">
+        <div class="pos-cliente-form-row pos-cliente-form-row--full">
+          <label class="form-label" for="pos-cliente-nuevo-nombre">Nombre completo <span class="pos-cliente-req">*</span></label>
+          <input
+            type="text"
+            id="pos-cliente-nuevo-nombre"
+            class="pos-cliente-field-input pos-no-scan"
+            maxlength="150"
+            placeholder="Ej. María López"
+          />
+        </div>
+        <div class="pos-cliente-form-grid">
+          <div class="pos-cliente-form-row">
+            <label class="form-label" for="pos-cliente-nuevo-doc">Cédula / RIF</label>
+            <input
+              type="text"
+              id="pos-cliente-nuevo-doc"
+              class="pos-cliente-field-input pos-cliente-field-input--mono pos-no-scan"
+              maxlength="20"
+              placeholder="V-12345678"
+            />
+          </div>
+          <div class="pos-cliente-form-row">
+            <label class="form-label" for="pos-cliente-nuevo-tel">Celular VE</label>
+            <input
+              type="text"
+              id="pos-cliente-nuevo-tel"
+              class="pos-cliente-field-input pos-cliente-field-input--mono pos-no-scan"
+              maxlength="11"
+              inputmode="numeric"
+              placeholder="04121234567"
+            />
+          </div>
+        </div>
+      </div>
+      <p class="pos-cliente-perm-hint" id="pos-cliente-nuevo-perm-hint" hidden>
+        Tu usuario no tiene permiso para crear clientes. Usa «Buscar» o pide a un supervisor el alta en Clientes.
+      </p>
+      <div class="pos-cliente-form-actions">
+        <button type="button" class="btn btn-primary btn-block" id="pos-cliente-nuevo-guardar">
+          Guardar y usar en esta venta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

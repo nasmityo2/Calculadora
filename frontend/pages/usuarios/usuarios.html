@@ -1,0 +1,115 @@
+<section class="page-content usuarios-page">
+<div class="page-header">
+  <div class="page-header-info">
+    <h1 class="page-title">Usuarios y Roles</h1>
+    <p class="page-subtitle">Gestión de accesos, contraseñas y permisos del sistema</p>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn-secondary" id="btn-gestionar-roles">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Gestionar Roles
+    </button>
+    <button class="btn-primary" id="btn-nuevo-usuario">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nuevo Usuario
+    </button>
+  </div>
+</div>
+
+<div id="usuarios-grid" class="usuarios-grid">
+  <div class="td-cargando" style="grid-column:1/-1">Cargando...</div>
+</div>
+
+<!-- Modal Crear/Editar Usuario -->
+<div class="modal-overlay" id="modal-usuario">
+  <div class="modal-box" id="modal-usuario-box">
+    <div class="modal-header">
+      <h2 id="modal-usuario-titulo">Nuevo Usuario</h2>
+      <button class="modal-close" id="btn-cerrar-modal-usuario">✕</button>
+    </div>
+    <input type="hidden" id="usuario-id">
+    <div class="campo-grupo">
+      <label>Nombre completo *</label>
+      <input type="text" id="usuario-nombre-completo" class="input-g" placeholder="Ej: Juan Pérez">
+    </div>
+    <div class="campo-grupo">
+      <label>Nombre de usuario (login) *</label>
+      <input type="text" id="usuario-username" class="input-g" placeholder="Ej: jperez" autocomplete="off">
+    </div>
+    <div class="campo-grupo" id="campo-password">
+      <label>Contraseña *</label>
+      <input type="password" id="usuario-password" class="input-g" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+    </div>
+    <div class="campo-grupo">
+      <label>Rol</label>
+      <select id="usuario-rol" class="input-g">
+        <option value="">Sin rol asignado</option>
+      </select>
+    </div>
+    <div class="campo-grupo" id="campo-activo" style="display:none">
+      <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+        <input type="checkbox" id="usuario-activo" checked>
+        <span>Usuario activo</span>
+      </label>
+    </div>
+
+    <!-- Permissions panel: only rendered if current user has usuarios_all -->
+    <div id="permisos-panel-wrap"></div>
+
+    <div class="modal-footer-row">
+      <button class="btn-secondary" id="btn-cancelar-modal-usuario">Cancelar</button>
+      <button class="btn-primary" id="btn-guardar-usuario">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Cambiar Contraseña -->
+<div class="modal-overlay" id="modal-cambiar-pass">
+  <div class="modal-box" style="max-width:400px">
+    <div class="modal-header">
+      <h2>Cambiar Contraseña</h2>
+      <button class="modal-close" id="btn-cerrar-cambiar-pass">✕</button>
+    </div>
+    <p id="cambiar-pass-info" class="modal-info-text"></p>
+    <input type="hidden" id="cambiar-pass-usuario-id">
+    <div class="campo-grupo" id="campo-pass-actual" style="display:none">
+      <label>Contraseña actual</label>
+      <input type="password" id="input-pass-actual" class="input-g" autocomplete="current-password">
+    </div>
+    <div class="campo-grupo">
+      <label>Nueva contraseña *</label>
+      <input type="password" id="input-pass-nueva" class="input-g" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+    </div>
+    <div class="modal-footer-row">
+      <button class="btn-secondary" id="btn-cancelar-cambiar-pass">Cancelar</button>
+      <button class="btn-primary" id="btn-confirmar-cambiar-pass">Cambiar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Roles -->
+<div class="modal-overlay" id="modal-roles">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-header">
+      <h2>Roles y Permisos</h2>
+      <button class="modal-close" id="btn-cerrar-roles">✕</button>
+    </div>
+    <div id="roles-lista" style="margin-bottom:1rem"></div>
+    <div class="roles-nuevo-panel">
+      <p class="roles-nuevo-panel-title">Nuevo Rol</p>
+      <div class="roles-crear-row">
+        <div>
+          <div class="campo-grupo" style="margin-bottom:0">
+            <label>Nombre del rol</label>
+            <input type="text" id="nuevo-rol-nombre" class="input-g" placeholder="Ej: supervisor">
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-crear-rol" style="white-space:nowrap">Crear Rol</button>
+      </div>
+    </div>
+    <div class="modal-footer-row">
+      <button class="btn-secondary" id="btn-cerrar-roles-2">Cerrar</button>
+    </div>
+  </div>
+</div>
+</section>

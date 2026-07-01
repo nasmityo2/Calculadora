@@ -1,0 +1,117 @@
+<section class="page-content compras-page">
+<div class="page-header">
+  <div class="page-header-info">
+    <h1 class="page-title">Compras y Recepción</h1>
+    <p class="page-subtitle">Registro de compras a proveedores · el stock se actualiza automáticamente al recibir mercancía</p>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn btn-primary" id="btn-nueva-compra">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Registrar compra
+    </button>
+  </div>
+</div>
+
+<!-- Alertas de órdenes pendientes -->
+<div id="compras-alertas" class="compras-alerta"></div>
+
+<!-- Toolbar filtros -->
+<div class="compras-toolbar">
+  <select id="compras-filtro-estado" class="input-g" style="width:180px">
+    <option value="">Todos los estados</option>
+    <option value="pendiente">Pendientes</option>
+    <option value="recibida">Recibidas</option>
+    <option value="cancelada">Canceladas</option>
+  </select>
+  <input type="search" id="compras-buscar" class="input-g" style="max-width:240px" placeholder="Buscar proveedor o número...">
+  <span id="compras-conteo" class="rpt-muted-text"></span>
+</div>
+
+<!-- Lista de compras -->
+<div class="card">
+  <div id="compras-empty" class="compras-empty">
+    <p class="compras-empty-title">Sin compras registradas</p>
+    <p class="compras-empty-desc">Cuando le compras mercancía a un proveedor, regístralo aquí para que el sistema actualice el stock automáticamente.</p>
+    <button class="btn-primary" onclick="document.getElementById('btn-nueva-compra').click()">+ Registrar primera compra</button>
+  </div>
+  <div style="overflow:auto" id="compras-tabla-wrap">
+    <table class="compras-table">
+      <thead>
+        <tr>
+          <th>Nro.</th>
+          <th>Fecha</th>
+          <th>Proveedor</th>
+          <th class="num">Total USD</th>
+          <th style="text-align:center">Ítems</th>
+          <th>Estado</th>
+          <th>Días Abierta</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="compras-tbody">
+        <tr><td colspan="8" class="td-cargando">Cargando compras...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NUEVA COMPRA ═══ -->
+<div class="modal-overlay" id="modal-compra">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Registrar Compra</h2>
+      <button class="modal-close" id="btn-cerrar-modal-compra">✕</button>
+    </div>
+
+    <!-- Paso 1: Proveedor -->
+    <div id="compra-paso-1">
+      <div class="campo-grupo">
+        <label>Proveedor</label>
+        <select id="compra-proveedor" class="input-g">
+          <option value="">Sin proveedor (compra directa)</option>
+        </select>
+      </div>
+      <div class="campo-grupo" style="display:flex;gap:12px;align-items:flex-end">
+        <div style="flex:1">
+          <label>Tipo de pago</label>
+          <select id="compra-tipo-pago" class="input-g">
+            <option value="contado">Contado</option>
+            <option value="credito">A crédito (genera CxP)</option>
+          </select>
+        </div>
+        <div id="campo-dias-credito" style="flex:0 0 130px;display:none">
+          <label>Días de crédito</label>
+          <input type="number" id="compra-dias-credito" class="input-g" value="30" min="1" max="365" placeholder="30">
+        </div>
+      </div>
+      <div class="campo-grupo">
+        <label>Notas (opcional)</label>
+        <input type="text" id="compra-notas" class="input-g" placeholder="Ej: Factura #123, proveedor XYZ...">
+      </div>
+    </div>
+
+    <!-- Paso 2: Productos -->
+    <div>
+      <p class="compra-productos-titulo">Productos</p>
+      <div class="compra-buscar-row">
+        <input type="text" id="compra-buscar-prod" class="input-g" placeholder="Buscar producto por nombre o código...">
+      </div>
+      <div id="compra-sugerencias" class="compra-sugerencias"></div>
+
+      <div id="compra-carrito" class="compra-carrito">
+        <p class="compra-carrito-vacio">Busca un producto arriba para agregarlo a la compra.</p>
+      </div>
+
+      <div class="compra-total-bar">
+        <span class="compra-total-label">Total de la compra</span>
+        <span id="compra-total" class="compra-total-valor">$0.00 USD</span>
+      </div>
+    </div>
+
+    <div class="modal-footer-row">
+      <button class="btn-secondary" id="btn-cancelar-modal-compra">Cancelar</button>
+      <button class="btn-primary" id="btn-confirmar-compra" disabled>Confirmar Compra</button>
+    </div>
+  </div>
+</div>
+</section>

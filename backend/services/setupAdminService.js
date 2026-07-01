@@ -1,0 +1,361 @@
+'use strict';
+
+const bcrypt = require('bcryptjs');
+
+const { getOne, run, transaction } = require('../config/db');
+const { logger } = require('../config/logger');
+const { registrarAuditoria } = require('../middleware/audit.middleware');
+const ModoMonedaService = require('./modoMonedaService');
+
+/** Debe coincidir con 004_seed_data.sql y migrations.js ADMIN_DEFAULT_PASSWORD_HASH */
+const ADMIN_DEFAULT_PASSWORD_HASH =
+  '$2a$10$YD93UDKrCaoufVSzuUh9/.RKBAYW3sTJObiKsplXK5O8gH2N/nN7a';
+
+const CONFIG_SETUP_ADMIN = 'setup_admin_completado';
+
+const USERNAME_RE = /^[a-z][a-z0-9_]{2,31}$/;
+
+/**
+ * @param {import('pg-promise').IDatabase} db
+ * @returns {Promise<boolean>}
+ */
+async function isSetupAdminCompletado(_db) {
+  const row = getOne(
+    `SELECT valor FROM configuracion WHERE clave = ? LIMIT 1`,
+    [CONFIG_SETUP_ADMIN]
+  );
+  return !!(row && String(row.valor).trim().toLowerCase() === 'true');
+}
+
+/**
+ * @param {import('pg-promise').IDatabase} db
+ * @returns {Promise<{ adminPendiente: boolean }>}
+ */
+async function obtenerEstadoSetupAdmin(db) {
+  const completado = await isSetupAdminCompletado(db);
+  return { adminPendiente: !completado };
+}
+
+/**
+ * AUD-SEC: estos endpoints de setup NO requieren JWT (corren antes del primer login). Para
+ * que un proceso local no pueda reconfigurar un sistema ya productivo, se valida que el
+ * asistente aún no haya terminado y que no exista una caja abierta. `setup_empresa_completado`
+ * (último paso de datos del wizard: empresa) es la señal de "instalación finalizada".
+ * @param {import('pg-promise').IDatabase} db
+ * @returns {Promise<boolean>}
+ */
+async function isSetupEmpresaCompletado(_db) {
+  const row = getOne(
+    `SELECT valor FROM configuracion WHERE clave = ? LIMIT 1`,
+    [CONFIG_SETUP_EMPRESA]
+  );
+  return !!(row && String(row.valor).trim().toLowerCase() === 'true');
+}
+
+async function hayCajaAbierta(_dbOrT) {
+  const row = getOne(
+    `SELECT id FROM sesiones_caja WHERE estado = 'abierta' AND fecha_cierre IS NULL LIMIT 1`
+  );
+  return !!row;
+}
+
+/**
+ * @param {unknown} body
+ */
+function validarPayloadAdminInicial(body) {
+  const nombreCompleto = body && body.nombre_completo != null
+    ? String(body.nombre_completo).trim()
+    : '';
+  const usernameRaw = body && body.username != null ? String(body.username).trim().toLowerCase() : '';
+  const password = body && body.password != null ? String(body.password) : '';
+  const passwordConfirm = body && body.password_confirm != null
+    ? String(body.password_confirm)
+    : (body && body.passwordConfirm != null ? String(body.passwordConfirm) : '');
+
+  if (!nombreCompleto || nombreCompleto.length < 2) {
+    throw new Error('El nombre completo es obligatorio (mínimo 2 caracteres).');
+  }
+  if (!usernameRaw || !USERNAME_RE.test(usernameRaw)) {
+    throw new Error(
+      'El usuario debe tener 3–32 caracteres: letras minúsculas, números o _ (debe empezar con letra).'
+    );
+  }
+  if (!password || password.length < 8) {
+    throw new Error('La contraseña debe tener al menos 8 caracteres.');
+  }
+  if (password !== passwordConfirm) {
+    throw new Error('Las contraseñas no coinciden.');
+  }
+
+  return { nombreCompleto, username: usernameRaw, password };
+}
+
+/**
+ * Personaliza la cuenta administrador semilla (admin/admin123) en la primera instalación.
+ * @param {import('pg-promise').IDatabase} db
+ * @param {{ nombreCompleto: string, username: string, password: string }} payload
+ * @param {string|null} ipAddress
+ */
+async function crearAdminInicial(_db, payload, ipAddress = null) {
+  if (await isSetupAdminCompletado()) {
+    const err = new Error('La cuenta de administrador ya fue configurada.');
+    err.status = 409;
+    throw err;
+  }
+
+  const { nombreCompleto, username, password } = payload;
+
+  // bcrypt es async: el hash se calcula ANTES de la transacción síncrona.
+  const hash = await bcrypt.hash(password, 10);
+  const ahoraIso = new Date().toISOString();
+
+  const actualizado = transaction(() => {
+    const completadoTx = getOne(
+      `SELECT valor FROM configuracion WHERE clave = ? LIMIT 1`,
+      [CONFIG_SETUP_ADMIN]
+    );
+    if (completadoTx && String(completadoTx.valor).trim().toLowerCase() === 'true') {
+      const err = new Error('La cuenta de administrador ya fue configurada.');
+      err.status = 409;
+      throw err;
+    }
+
+    const rolAdmin = getOne(`SELECT id FROM roles WHERE LOWER(TRIM(nombre)) = 'admin' LIMIT 1`);
+    if (!rolAdmin) {
+      throw new Error('setupAdminService.crearAdminInicial: rol admin no encontrado en la base de datos.');
+    }
+
+    const semillaAdmin = getOne(
+      `SELECT id, username, password_hash, nombre_completo, rol_id
+       FROM usuarios
+       WHERE LOWER(TRIM(username)) = 'admin'
+       LIMIT 1`
+    );
+
+    if (!semillaAdmin) {
+      throw new Error(
+        'setupAdminService.crearAdminInicial: no existe el usuario semilla admin; reinicia la aplicación e intenta de nuevo.'
+      );
+    }
+
+    if (semillaAdmin.password_hash !== ADMIN_DEFAULT_PASSWORD_HASH) {
+      run(
+        `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+         VALUES (?, 'true', 'sistema', ?)
+         ON CONFLICT (clave) DO UPDATE SET valor = 'true', actualizado_en = ?`,
+        [CONFIG_SETUP_ADMIN, 'Administrador ya personalizado (detectado al crear admin inicial)', ahoraIso]
+      );
+      const err = new Error('La cuenta de administrador ya fue configurada.');
+      err.status = 409;
+      throw err;
+    }
+
+    const otroUsuario = getOne(
+      `SELECT id FROM usuarios WHERE LOWER(TRIM(username)) = ? AND id <> ? LIMIT 1`,
+      [username, semillaAdmin.id]
+    );
+    if (otroUsuario) {
+      const err = new Error(`El usuario «${username}» ya existe. Elige otro nombre.`);
+      err.status = 409;
+      throw err;
+    }
+
+    run(
+      `UPDATE usuarios
+       SET username = ?,
+           password_hash = ?,
+           nombre_completo = ?,
+           rol_id = ?,
+           activo = 1
+       WHERE id = ?`,
+      [username, hash, nombreCompleto, rolAdmin.id, semillaAdmin.id]
+    );
+    const filaActualizada = getOne(
+      `SELECT id, username, nombre_completo, activo FROM usuarios WHERE id = ?`,
+      [semillaAdmin.id]
+    );
+
+    run(
+      `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+       VALUES (?, 'true', 'sistema', ?)
+       ON CONFLICT (clave) DO UPDATE SET valor = 'true', actualizado_en = ?`,
+      [CONFIG_SETUP_ADMIN, 'Wizard inicial: administrador personalizado', ahoraIso]
+    );
+
+    void registrarAuditoria(null, {
+      usuario_id: filaActualizada.id,
+      accion: 'SETUP_ADMIN_INICIAL',
+      tabla_afectada: 'usuarios',
+      registro_id: filaActualizada.id,
+      datos_anteriores: {
+        username: semillaAdmin.username,
+        nombre_completo: semillaAdmin.nombre_completo
+      },
+      datos_nuevos: {
+        username: filaActualizada.username,
+        nombre_completo: filaActualizada.nombre_completo
+      },
+      ip_address: ipAddress
+    });
+
+    return filaActualizada;
+  });
+
+  logger.info('Setup inicial: cuenta administrador personalizada', {
+    usuario_id: actualizado.id,
+    username: actualizado.username
+  });
+
+  return actualizado;
+}
+
+const CLAVES_EMPRESA_PERMITIDAS = new Set([
+  'empresa_nombre', 'empresa_rif', 'empresa_telefono',
+  'empresa_email', 'empresa_direccion'
+]);
+
+const CONFIG_SETUP_EMPRESA = 'setup_empresa_completado';
+
+/**
+ * Guarda datos iniciales de la empresa y el modo Cashea durante el wizard de instalación.
+ * No requiere JWT: se llama antes del primer inicio de sesión.
+ * @param {import('pg-promise').IDatabase} db
+ * @param {{ empresa_nombre: string, empresa_rif?: string, empresa_telefono?: string,
+ *           empresa_email?: string, empresa_direccion?: string, cashea_modo_express?: boolean }} payload
+ */
+async function guardarEmpresaInicial(_db, payload) {
+  const p = payload && typeof payload === 'object' ? payload : {};
+
+  const nombre = String(p.empresa_nombre ?? '').trim();
+  if (!nombre || nombre.length < 2) {
+    throw new Error('El nombre de la empresa es obligatorio (mínimo 2 caracteres).');
+  }
+
+  // AUD-SEC: no permitir reescritura de datos de empresa con una caja abierta (sistema en
+  // operación). El wizard inicial y la reactivación de licencia corren antes del login,
+  // sin caja abierta, de modo que este guard no rompe esos flujos.
+  if (await hayCajaAbierta()) {
+    const err = new Error('No se puede ejecutar la configuración inicial con una caja abierta.');
+    err.status = 409;
+    throw err;
+  }
+
+  const camposEmpresa = {};
+  camposEmpresa.empresa_nombre = nombre;
+  if (p.empresa_rif != null && String(p.empresa_rif).trim()) {
+    camposEmpresa.empresa_rif = String(p.empresa_rif).trim().slice(0, 30);
+  }
+  if (p.empresa_telefono != null && String(p.empresa_telefono).trim()) {
+    camposEmpresa.empresa_telefono = String(p.empresa_telefono).trim().slice(0, 30);
+  }
+  if (p.empresa_email != null && String(p.empresa_email).trim()) {
+    camposEmpresa.empresa_email = String(p.empresa_email).trim().slice(0, 120);
+  }
+  if (p.empresa_direccion != null && String(p.empresa_direccion).trim()) {
+    camposEmpresa.empresa_direccion = String(p.empresa_direccion).trim().slice(0, 200);
+  }
+
+  const modoExpress = p.cashea_modo_express === true || String(p.cashea_modo_express).toLowerCase() === 'true';
+
+  const ahoraIso = new Date().toISOString();
+  transaction(() => {
+    for (const [clave, valor] of Object.entries(camposEmpresa)) {
+      if (!CLAVES_EMPRESA_PERMITIDAS.has(clave)) continue;
+      run(
+        `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+         VALUES (?, ?, 'empresa', ?)
+         ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor, actualizado_en = ?`,
+        [clave, valor, `Configurado en wizard inicial · ${clave}`, ahoraIso]
+      );
+    }
+
+    run(
+      `UPDATE cashea_config
+       SET modo_express_activo = ?, updated_at = ?
+       WHERE id = (SELECT id FROM cashea_config ORDER BY id ASC LIMIT 1)`,
+      [modoExpress ? 1 : 0, ahoraIso]
+    );
+
+    run(
+      `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+       VALUES (?, 'true', 'sistema', 'Wizard inicial: empresa y Cashea configurados')
+       ON CONFLICT (clave) DO UPDATE SET valor = 'true', actualizado_en = ?`,
+      [CONFIG_SETUP_EMPRESA, ahoraIso]
+    );
+  });
+
+  logger.info('Setup inicial: empresa y modo Cashea configurados', {
+    empresa_nombre: nombre,
+    cashea_modo_express: modoExpress
+  });
+
+  return { empresa_nombre: nombre, cashea_modo_express: modoExpress };
+}
+
+/**
+ * Guarda el modo monetario elegido en el wizard de instalación (sin JWT).
+ * En `solo_bcv` unifica de inmediato tasa_usd = tasa_bcv vigente.
+ * @param {import('pg-promise').IDatabase} db
+ * @param {string} modo 'multimoneda' | 'solo_bcv'
+ */
+async function guardarModoMonedaInicial(_db, modo) {
+  const m = String(modo ?? '').trim().toLowerCase();
+  if (!ModoMonedaService.MODOS_VALIDOS.has(m)) {
+    throw new Error('modo_moneda_operacion debe ser multimoneda o solo_bcv');
+  }
+
+  // AUD-SEC (CRÍTICO): cambiar el modo monetario reescribe tasa_usd en solo_bcv. Este endpoint
+  // sin JWT solo puede usarse durante el asistente inicial (antes de completar empresa) y nunca
+  // con una caja abierta. Tras la instalación, el modo se cambia por PATCH /api/configuracion/
+  // modo-moneda (requiere permiso tasas_edit + caja cerrada).
+  if (await isSetupEmpresaCompletado()) {
+    const err = new Error(
+      'El asistente de instalación ya se completó. Cambia el modo monetario desde Configuración → Moneda y Tasas.'
+    );
+    err.status = 409;
+    throw err;
+  }
+  if (await hayCajaAbierta()) {
+    const err = new Error('No se puede cambiar el modo monetario con una caja abierta. Cierra la caja primero.');
+    err.status = 409;
+    throw err;
+  }
+
+  const ahoraIso = new Date().toISOString();
+  transaction(() => {
+    run(
+      `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+       VALUES (?, ?, 'moneda', 'Modo operativo elegido en el wizard inicial')
+       ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor, actualizado_en = ?`,
+      [ModoMonedaService.CLAVE_MODO, m, ahoraIso]
+    );
+
+    if (m === 'solo_bcv') {
+      // No existe dólar calle: la tasa USD arranca igualada a la BCV vigente.
+      const row = getOne(`SELECT valor FROM configuracion WHERE clave = 'tasa_bcv' LIMIT 1`);
+      if (row && row.valor != null && String(row.valor).trim() !== '') {
+        run(
+          `INSERT INTO configuracion (clave, valor, categoria)
+           VALUES ('tasa_usd', ?, 'moneda')
+           ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor, actualizado_en = ?`,
+          [String(row.valor), ahoraIso]
+        );
+      }
+    }
+  });
+
+  logger.info('Setup inicial: modo monetario configurado', { modo_moneda_operacion: m });
+  return { modo_moneda_operacion: m };
+}
+
+module.exports = {
+  ADMIN_DEFAULT_PASSWORD_HASH,
+  CONFIG_SETUP_ADMIN,
+  CONFIG_SETUP_EMPRESA,
+  isSetupAdminCompletado,
+  obtenerEstadoSetupAdmin,
+  validarPayloadAdminInicial,
+  crearAdminInicial,
+  guardarEmpresaInicial,
+  guardarModoMonedaInicial
+};

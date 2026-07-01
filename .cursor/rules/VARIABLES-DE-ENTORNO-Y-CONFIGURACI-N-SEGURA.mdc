@@ -1,0 +1,46 @@
+---
+alwaysApply: true
+---
+
+VARIABLES CRÍTICAS — VALIDACIÓN OBLIGATORIA AL ARRANQUE:
+Las siguientes variables DEBEN validarse en backend/server.js antes de app.listen():
+- JWT_SECRET: si NODE_ENV=production y JWT_SECRET es el valor de desarrollo por defecto,
+  el servidor DEBE abortar con un error explícito. NUNCA arrancar producción con secret débil.
+- NEXUS_LICENSE_PUBLIC_KEY: si no está presente, usar la clave embebida por defecto,
+  pero loggear una advertencia nivel WARN con winston.
+- PG_PASSWORD: si está vacío en producción, loggear advertencia de seguridad.
+
+REGLAS DE .env:
+- El archivo .env NUNCA se commitea al repositorio. .gitignore ya lo excluye.
+- Toda nueva variable de entorno que el agente requiera DEBE:
+    1. Agregarse a .env.example con descripción y valor de ejemplo (no el real).
+    2. Documentarse en este mismo archivo de configuración bajo la sección correspondiente.
+- PROHIBIDO leer process.env en archivos del frontend. Las configuraciones que el
+  renderer necesite se pasan exclusivamente vía IPC desde main.js (canales ya definidos).
+
+ELECTRON DOTENV:
+- dotenv se carga desde electron/main.js con path relativo ../​.env.
+  PROHIBIDO cargar dotenv desde archivos del backend directamente si ya lo hace main.js;
+  verificar el orden de carga para evitar variables undefined en arranque del backend embebido.
+
+API BCV PRIVADA (tasa + feriados):
+- **NEXUS_BCV_API_URL** (opcional): base del servidor BCV (default `https://dayzove.lat`, solo HTTPS, sin barra final).
+- **NEXUS_BCV_API_KEY** (opcional, sensible): clave `bcv_…` para endpoints protegidos
+ (tasa enriquecida `GET /bcv/v1/rate` con `effective_date` exacto, y feriados `GET /bcv/v1/holidays`).
+ Sin clave: la tasa usa el contrato público `/bcv-api` y los feriados el calendario local.
+ La lee únicamente `backend/services/bcvApiClient.js` desde `process.env`.
+ PROHIBIDO hardcodearla, loggearla o devolverla al frontend (no incluir en respuestas de estado).
+ Documentada en `.env.example` bajo «Tasa BCV automática + feriados».
+
+MOTOR DE BASE DE DATOS (migración SQLite):
+- **DB_ENGINE** (opcional): `sqlite` activa el motor better-sqlite3 vía backend/config/db.js.
+ Cualquier otro valor (o ausencia) usa PostgreSQL/pg-promise. Feature flag de la migración.
+- **NEXUS_SQLITE_DIR** (opcional): carpeta del archivo nexus.db. Default: userData de
+ Electron + NexusCore_data, o %APPDATA%\NexusCore_data en modo standalone.
+ La lee únicamente backend/config/database.sqlite.js. Documentadas en .env.example.
+
+RESPALDOS PERIÓDICOS (optional):
+- **NEXUS_BACKUP_INTERVAL_MINUTES** (entero, opcional): intervalo fijo en minutos entre respaldos automáticos (`pg_dump`).
+  **0** desactiva únicamente el programa periódico; no afecta respaldo al cerrar caja o al salir de la app.
+  Sin esta variable, el intervalo se toma de `configuracion.backup_automatico` y `backup_intervalo_horas` (UI Configuración → Respaldo).
+  Documentada también en `.env.example` junto a NEXUS_BACKUP_DIR / NEXUS_PG_*.

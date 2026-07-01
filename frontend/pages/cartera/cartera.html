@@ -1,0 +1,109 @@
+<section class="page-content cartera-page">
+<div class="page-header">
+  <div class="page-header-info">
+    <h1 class="page-title">Cartera — Cuentas por Cobrar</h1>
+    <p class="page-subtitle">Gestión de créditos otorgados, antigüedad de saldos y abonos</p>
+  </div>
+  <div class="page-header-actions">
+    <button class="btn-secondary" id="btn-cartera-refresh">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Actualizar
+    </button>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="cartera-kpis" id="cartera-kpis">
+  <div class="cartera-kpi"><div class="cartera-kpi-label">Deuda Total</div><div class="cartera-kpi-value" id="kpi-deuda-total">—</div></div>
+  <div class="cartera-kpi peligro"><div class="cartera-kpi-label">Deuda Vencida</div><div class="cartera-kpi-value" id="kpi-deuda-vencida">—</div></div>
+  <div class="cartera-kpi"><div class="cartera-kpi-label">Cuentas Abiertas</div><div class="cartera-kpi-value" id="kpi-cuentas">—</div></div>
+  <div class="cartera-kpi peligro"><div class="cartera-kpi-label">Cuentas Vencidas</div><div class="cartera-kpi-value" id="kpi-vencidas">—</div></div>
+</div>
+
+<!-- Alertas -->
+<div id="cartera-alertas-vencidas" class="alerta-vencidas" style="display:none"></div>
+
+<!-- Aging buckets -->
+<p class="cartera-aging-titulo">Antigüedad de Saldos</p>
+<div class="aging-grid" id="aging-grid">
+  <div class="aging-bucket bucket-0"><div class="aging-bucket-label">Al corriente</div><div class="aging-bucket-usd" id="bucket-corriente">—</div><div class="aging-bucket-count" id="bcount-corriente">0 cuentas</div></div>
+  <div class="aging-bucket bucket-1"><div class="aging-bucket-label">1 – 30 días</div><div class="aging-bucket-usd" id="bucket-1-30">—</div><div class="aging-bucket-count" id="bcount-1-30">0 cuentas</div></div>
+  <div class="aging-bucket bucket-2"><div class="aging-bucket-label">31 – 60 días</div><div class="aging-bucket-usd" id="bucket-31-60">—</div><div class="aging-bucket-count" id="bcount-31-60">0 cuentas</div></div>
+  <div class="aging-bucket bucket-3"><div class="aging-bucket-label">61 – 90 días</div><div class="aging-bucket-usd" id="bucket-61-90">—</div><div class="aging-bucket-count" id="bcount-61-90">0 cuentas</div></div>
+  <div class="aging-bucket bucket-4"><div class="aging-bucket-label">+ 90 días</div><div class="aging-bucket-usd" id="bucket-91-mas">—</div><div class="aging-bucket-count" id="bcount-91-mas">0 cuentas</div></div>
+</div>
+
+<!-- Filtros y tabla -->
+<div class="toolbar">
+  <select id="filtro-estado" class="input-g" style="width:180px">
+    <option value="">Pendiente + Vencida</option>
+    <option value="pendiente">Solo Pendiente</option>
+    <option value="vencida">Solo Vencida</option>
+    <option value="pagada">Pagada</option>
+  </select>
+  <input type="search" id="filtro-buscar" class="input-g" style="max-width:260px" placeholder="Buscar cliente...">
+  <button class="btn-secondary" id="btn-exportar-cartera">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Exportar Excel
+  </button>
+</div>
+
+<div class="card" style="overflow:auto">
+  <table class="cuentas-table">
+    <thead>
+      <tr>
+        <th>Cliente</th>
+        <th>Factura</th>
+        <th>Fecha</th>
+        <th>Vencimiento</th>
+        <th>Días Vencida</th>
+        <th class="num">Monto Original ($ BCV)</th>
+        <th class="num">Saldo Pendiente ($ BCV)</th>
+        <th>Estado</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="cuentas-tbody">
+      <tr><td colspan="9" class="td-cargando">Cargando...</td></tr>
+    </tbody>
+  </table>
+  <div id="cartera-paginacion" class="cartera-paginacion"></div>
+</div>
+
+<!-- Modal Abono -->
+<div class="modal-overlay" id="modal-abono">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Registrar Abono</h2>
+      <button class="modal-close" id="btn-cerrar-abono">✕</button>
+    </div>
+    <div id="abono-info" class="abono-info-box"></div>
+    <input type="hidden" id="abono-cuenta-id">
+    <div class="campo-grupo">
+      <label>Método de pago *</label>
+      <select id="abono-metodo" class="input-g">
+        <option value="efectivo_bs">Efectivo Bs</option>
+        <option value="transferencia_bs">Transferencia Bs</option>
+        <option value="pago_movil">Pago Móvil</option>
+        <option value="punto">Punto TDD</option>
+        <option value="efectivo_usd">Efectivo USD</option>
+        <option value="zelle">Zelle</option>
+      </select>
+    </div>
+    <div class="campo-grupo">
+      <label id="abono-monto-label">Monto recibido (Bs.) *</label>
+      <input type="text" id="abono-monto" class="input-g" inputmode="decimal" autocomplete="off" data-no-nexus-stepper="true" placeholder="Ej: 21.069,51">
+      <p id="abono-tasa-hint" class="abono-tasa-hint"></p>
+    </div>
+    <div id="abono-equiv" class="abono-equiv-box"></div>
+    <div class="campo-grupo">
+      <label>Notas (opcional)</label>
+      <input type="text" id="abono-notas" class="input-g" placeholder="Ej: pago parcial...">
+    </div>
+    <div class="modal-footer-row">
+      <button class="btn-secondary" id="btn-cancelar-abono">Cancelar</button>
+      <button class="btn-primary" id="btn-guardar-abono">Registrar Abono</button>
+    </div>
+  </div>
+</div>
+</section>

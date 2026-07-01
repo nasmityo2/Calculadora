@@ -1,0 +1,124 @@
+{
+  "name": "nexus-core",
+  "version": "1.0.0",
+  "description": "Nexus Core ERP/POS — escritorio Windows (Win7+)",
+  "main": "electron/main.js",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "start:packaged": "npm run icons && npm run pack && \"dist\\win-unpacked\\Nexus Core.exe\"",
+    "backend": "node backend/server.js",
+    "pack": "node scripts/ensure-icons.js && electron-builder --dir && node scripts/patch-exe-icon.js",
+    "dist": "node scripts/ensure-icons.js && electron-builder --win",
+    "dist:portable": "node scripts/ensure-icons.js && electron-builder --win portable",
+    "dist:nsis": "node scripts/ensure-icons.js && electron-builder --win nsis",
+    "icons": "node scripts/generate-app-icon.js",
+    "db:reset": "node scripts/reset-database.js --confirm",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^8.5.0",
+    "chart.js": "3.9.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.5.0",
+    "jsbarcode": "^3.12.3",
+    "jsdom": "^20.0.3",
+    "jsonwebtoken": "^9.0.2",
+    "jspdf": "2.5.2",
+    "jspdf-autotable": "^3.8.4",
+    "multer": "^2.1.1",
+    "node-thermal-printer": "^4.6.0",
+    "qrcode": "^1.5.4",
+    "quagga": "^0.12.1",
+    "svg2pdf.js": "^2.2.3",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "electron": "22.3.27",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^4.0.1",
+    "sharp": "^0.34.5"
+  },
+  "build": {
+    "appId": "com.nexuscore.pos",
+    "productName": "Nexus Core",
+    "copyright": "Copyright © 2024-2026 Nexus Core",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/**/*",
+      "backend/**/*",
+      "resources/**/*",
+      "package.json",
+      "!database/postgres/**",
+      "!**/*.log",
+      "!dist/**",
+      "!node_modules/.cache/**",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/build/Release/obj/**",
+      "!node_modules/better-sqlite3/build/deps/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "ia32"
+          ]
+        }
+      ],
+      "icon": "icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nexus Core",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "language": "3082",
+      "installerLanguages": [
+        "es"
+      ],
+      "include": "build-resources/installer.nsh"
+    },
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "build-resources/icon.ico",
+        "to": "branding/icon.ico"
+      },
+      {
+        "from": "build-resources/icon.png",
+        "to": "branding/icon.png"
+      }
+    ],
+    "extraFiles": [],
+    "compression": "maximum",
+    "removePackageScripts": true
+  }
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus Core</title>
+  <link rel="icon" type="image/svg+xml" href="assets/img/logo.svg">
+  <meta name="theme-color" content="#0a0e1a">
+  <meta name="application-name" content="Nexus Core">
+  <link rel="stylesheet" href="assets/css/variables.css" />
+  <script>
+    // Anti-FOUC: aplicar tema guardado antes de que el DOM renderice
+    (function() {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var t = params.get('theme') || localStorage.getItem('nexus_theme') || 'dark';
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        try { localStorage.setItem('nexus_theme', t); } catch (e2) {}
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.content = t === 'light' ? '#f4f6fa' : '#0a0e1a';
+      } catch(e) {}
+    })();
+  </script>
+  <script>
+    // Reemplaza window.confirm/window.alert por diálogos nativos del proceso
+    // principal (nexusDialogs, expuesto por el preload). En Windows, los diálogos
+    // JS de Chromium dejan el foco de teclado atascado en el webContents: tras
+    // cerrarlos no se puede escribir en los inputs (p. ej. el login al cerrar
+    // sesión) hasta hacer clic fuera de la app y volver. Esta sustitución elimina
+    // el bug en TODOS los confirm()/alert() de la app sin tocar cada llamada.
+    (function () {
+      try {
+        var nativeConfirm = typeof window.confirm === 'function' ? window.confirm.bind(window) : null;
+        var nativeAlert = typeof window.alert === 'function' ? window.alert.bind(window) : null;
+        // Se resuelve nexusDialogs en el momento de la llamada (no al cargar) para
+        // ser inmune al orden de carga del preload; los confirm()/alert() ocurren
+        // por interacción del usuario, mucho después de exponerse nexusDialogs.
+        window.confirm = function (message) {
+          if (window.nexusDialogs && typeof window.nexusDialogs.confirm === 'function') {
+            return window.nexusDialogs.confirm(message);
+          }
+          return nativeConfirm ? nativeConfirm(message) : true;
+        };
+        window.alert = function (message) {
+          if (window.nexusDialogs && typeof window.nexusDialogs.alert === 'function') {
+            window.nexusDialogs.alert(message);
+            return;
+          }
+          if (nativeAlert) nativeAlert(message);
+        };
+      } catch (e) { /* navegador sin preload: conservar diálogos nativos */ }
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/css/base.css" />
+  <link rel="stylesheet" href="assets/css/components.css" />
+  <link rel="stylesheet" href="assets/css/pages.css" />
+  <link rel="stylesheet" href="assets/css/animations.css" />
+  <link rel="stylesheet" href="assets/css/pos.css" />
+</head>
+<body>
+  <div id="layout-root" class="layout-root">
+    <div id="sidebar-host"></div>
+    <div class="layout-main">
+      <div id="navbar-host"></div>
+      <main id="view" class="view-container" tabindex="-1" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <script src="services/temaService.js"></script>
+  <script src="services/authClient.js"></script>
+  <script src="services/cuentasPagarClient.js"></script>
+  <script src="services/cotizacionesClient.js"></script>
+  <script src="services/telefonoVe.js"></script>
+  <script src="services/preciosClient.js"></script>
+  <script src="components/currencyDisplay.js"></script>
+  <script src="services/numberStepper.js"></script>
+  <script src="services/expiraLicenciaUi.js"></script>
+  <script src="utils/domSafe.js"></script>
+  <script src="utils/casheaBrand.js"></script>
+  <script src="../node_modules/chart.js/dist/chart.min.js"></script>
+  <script src="router.js"></script>
+  <script src="components/toast.js"></script>
+  <script src="components/navbar.js"></script>
+  <script src="components/sidebar.js"></script>
+  <script src="pages/dashboard/dashboard.js"></script>
+  <script src="pages/pos/pos.js"></script>
+  <script src="pages/inventario/inventario.js"></script>
+  <script src="pages/ventas/ventas.js"></script>
+  <script src="pages/clientes/clientes.js"></script>
+  <script src="pages/cartera/cartera.js"></script>
+  <script src="pages/proveedores/proveedores.js"></script>
+  <script src="pages/caja/caja.js"></script>
+  <script src="pages/reportes/reportes.js"></script>
+  <script src="pages/configuracion/configuracion.js"></script>
+  <script src="pages/compras/compras.js"></script>
+  <script src="pages/cuentas_pagar/cuentas_pagar.js"></script>
+  <script src="pages/usuarios/usuarios.js"></script>
+  <script src="pages/cashea/cashea.js"></script>
+  <script src="pages/cotizaciones/cotizaciones.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

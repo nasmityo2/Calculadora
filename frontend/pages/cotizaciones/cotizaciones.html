@@ -1,0 +1,200 @@
+<!-- frontend/pages/cotizaciones/cotizaciones.html -->
+<div class="cotizaciones-page">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <div class="page-header-info">
+      <h1 class="page-title">COTIZACIONES</h1>
+      <p class="page-subtitle">Genera, gestiona y convierte presupuestos en ventas con montos duales BCV/Bs.</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary" id="cot-btn-nueva">+ Nueva cotización</button>
+    </div>
+  </div>
+
+  <!-- FILTROS -->
+  <div class="cotizaciones-filtros">
+    <select class="form-input" id="cot-filtro-estado" style="width:180px">
+      <option value="">Todos los estados</option>
+      <option value="borrador">Borrador</option>
+      <option value="enviada">Enviada</option>
+      <option value="aceptada">Aceptada</option>
+      <option value="rechazada">Rechazada</option>
+      <option value="vencida">Vencida</option>
+      <option value="anulada">Anulada</option>
+    </select>
+    <button class="btn btn-secondary" id="cot-btn-recargar">Actualizar</button>
+  </div>
+
+  <!-- TABLA -->
+  <div class="data-table-wrap">
+    <table class="data-table" id="cot-tabla">
+      <thead>
+        <tr>
+          <th>N.º COTIZACIÓN</th>
+          <th>CLIENTE</th>
+          <th>FECHA EMISIÓN</th>
+          <th>VENCE</th>
+          <th>ESTADO</th>
+          <th class="num">TOTAL USD</th>
+          <th class="num">TOTAL Bs.</th>
+          <th class="num">TASA BCV</th>
+          <th style="width:140px">ACCIONES</th>
+        </tr>
+      </thead>
+      <tbody id="cot-tbody">
+        <tr id="cot-loading-row">
+          <td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">Cargando cotizaciones…</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ESTADO VACÍO -->
+  <div class="empty-state" id="cot-empty" style="display:none">
+    <p class="empty-state-text">Todavía no hay cotizaciones registradas.</p>
+    <button class="btn btn-primary" id="cot-btn-nueva-empty">+ Crear primera cotización</button>
+  </div>
+
+</div>
+
+<!-- ═══════ MODAL: NUEVA COTIZACIÓN ═══════ -->
+<div class="modal-overlay" id="cot-modal-nueva" style="display:none">
+  <div class="modal" style="max-width:860px;width:95vw">
+
+    <div class="modal-header">
+      <h2>NUEVA COTIZACIÓN</h2>
+      <button class="btn btn-icon modal-close" data-modal="cot-modal-nueva">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Fila 1: Cliente + Vencimiento -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
+        <div class="form-group">
+          <label class="form-label">CLIENTE</label>
+          <input type="text" class="form-input" id="cot-buscar-cliente" placeholder="Buscar por nombre o RIF…" autocomplete="off">
+          <div id="cot-cliente-sugerencias" class="cotizaciones-sugerencias" style="display:none"></div>
+          <input type="hidden" id="cot-cliente-id">
+          <div id="cot-cliente-seleccionado" class="cot-cliente-tag" style="display:none"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">FECHA DE VENCIMIENTO</label>
+          <input type="date" class="form-input" id="cot-fecha-vencimiento">
+        </div>
+      </div>
+
+      <!-- Fila 2: IVA + Descuento -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
+        <div class="form-group">
+          <label class="form-label">IVA (%)</label>
+          <input type="number" class="form-input input-mono" id="cot-iva-pct" value="0" min="0" max="100" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label">DESCUENTO GLOBAL (%)</label>
+          <input type="number" class="form-input input-mono" id="cot-desc-pct" value="0" min="0" max="100" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label">NOTAS</label>
+          <input type="text" class="form-input" id="cot-notas" placeholder="Condiciones, observaciones…" maxlength="400">
+        </div>
+      </div>
+
+      <!-- Agregar ítem -->
+      <div style="display:flex;gap:var(--space-3);align-items:flex-end;margin-bottom:var(--space-3);flex-wrap:wrap">
+        <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0">
+          <label class="form-label">BUSCAR PRODUCTO</label>
+          <input type="text" class="form-input" id="cot-buscar-prod" placeholder="Código o nombre…" autocomplete="off">
+          <div id="cot-prod-sugerencias" class="cotizaciones-sugerencias" style="display:none"></div>
+        </div>
+        <div class="form-group" style="width:90px;margin-bottom:0">
+          <label class="form-label">CANT.</label>
+          <input type="number" class="form-input input-mono" id="cot-item-cant" value="1" min="0.001" step="1">
+        </div>
+        <div class="form-group" style="width:130px;margin-bottom:0">
+          <label class="form-label">PRECIO USD</label>
+          <input type="number" class="form-input input-mono" id="cot-item-precio" value="0" min="0" step="0.01">
+        </div>
+        <button class="btn btn-secondary" id="cot-btn-add-item" style="margin-bottom:0">+ Agregar</button>
+      </div>
+
+      <!-- Tabla de ítems -->
+      <div class="data-table-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:var(--space-4)">
+        <table class="data-table" id="cot-items-tabla">
+          <thead>
+            <tr>
+              <th>DESCRIPCIÓN</th>
+              <th class="num">CANT.</th>
+              <th class="num">P.U. USD</th>
+              <th class="num">SUBT. USD</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="cot-items-tbody">
+            <tr id="cot-items-empty-row">
+              <td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">
+                Sin ítems — agrega productos arriba.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Resumen de totales -->
+      <div id="cot-resumen" class="cotizaciones-resumen" style="display:none">
+        <div class="cotizaciones-resumen-fila">
+          <span>Subtotal ref. USD</span>
+          <span class="cotizaciones-resumen-monto" id="cot-res-subtotal">$0.0000</span>
+        </div>
+        <div class="cotizaciones-resumen-fila" id="cot-res-desc-row" style="display:none">
+          <span id="cot-res-desc-label">Descuento (0%)</span>
+          <span class="cotizaciones-resumen-monto" id="cot-res-desc">−$0.00</span>
+        </div>
+        <div class="cotizaciones-resumen-fila" id="cot-res-iva-row" style="display:none">
+          <span id="cot-res-iva-label">IVA (0%)</span>
+          <span class="cotizaciones-resumen-monto" id="cot-res-iva">$0.00</span>
+        </div>
+        <div class="cotizaciones-resumen-fila cotizaciones-resumen-total">
+          <span>TOTAL ref. USD</span>
+          <span class="cotizaciones-resumen-monto" id="cot-res-total">$0.0000</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-modal-close="cot-modal-nueva">Cancelar</button>
+      <button class="btn btn-primary" id="cot-btn-guardar">Guardar cotización</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════ MODAL: DETALLE / ESTADO ═══════ -->
+<div class="modal-overlay" id="cot-modal-detalle" style="display:none">
+  <div class="modal" style="max-width:600px;width:95vw">
+
+    <div class="modal-header">
+      <h2 id="cot-det-titulo">COTIZACIÓN</h2>
+      <button class="btn btn-icon modal-close" data-modal="cot-modal-detalle">✕</button>
+    </div>
+
+    <div class="modal-body" id="cot-det-body">
+      <!-- Se rellena dinámicamente -->
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-modal-close="cot-modal-detalle">Cerrar</button>
+      <button class="btn btn-secondary" id="cot-det-btn-pdf">Descargar PDF</button>
+      <select class="form-input" id="cot-det-select-estado" style="width:160px">
+        <option value="">Cambiar estado…</option>
+        <option value="enviada">Enviada</option>
+        <option value="aceptada">Aceptada</option>
+        <option value="rechazada">Rechazada</option>
+        <option value="anulada">Anular</option>
+      </select>
+      <button class="btn btn-primary" id="cot-det-btn-cambiar-estado">Aplicar</button>
+    </div>
+
+  </div>
+</div>

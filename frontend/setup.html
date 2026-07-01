@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https: http://127.0.0.1:3000;">
+  <title>Nexus Core · Instalación</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Barlow+Condensed:wght@700;800&family=DM+Mono:wght@400;500&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root,
+    [data-theme="dark"] {
+      --bg-primary:          #05080f;
+      --bg-secondary:        #090d18;
+      --bg-tertiary:         #0d1424;
+      --bg-elevated:         #162035;
+      --accent-primary:      #f0a500;
+      --accent-primary-dim:  #c47f00;
+      --accent-primary-bg:   rgba(240, 165, 0, 0.07);
+      --accent-primary-glow: rgba(240, 165, 0, 0.12);
+      --border-accent:       rgba(240, 165, 0, 0.25);
+      --accent-success:      #22c55e;
+      --accent-danger:       #ef4444;
+      --text-primary:        #edf2f7;
+      --text-secondary:      #7a8fa8;
+      --text-muted:          #3d5068;
+      --text-bright:         #ffffff;
+      --text-on-accent:      #05080f;
+      --text-on-color:       #ffffff;
+      --border-primary:      #1a2540;
+      --body-gradient-amber: rgba(240, 165, 0, 0.040);
+      --body-gradient-info:  rgba(59, 130, 246, 0.030);
+      --font-ui:             'Sora', system-ui, sans-serif;
+      --font-display:        'Barlow Condensed', sans-serif;
+      --font-mono:           'DM Mono', 'JetBrains Mono', monospace;
+    }
+
+    [data-theme="light"] {
+      --bg-primary:          #f4f6fa;
+      --bg-secondary:        #ffffff;
+      --bg-tertiary:         #eef1f6;
+      --bg-elevated:         #ffffff;
+      --accent-primary:      #f0a500;
+      --accent-primary-dim:  #c47f00;
+      --accent-primary-bg:   rgba(240, 165, 0, 0.09);
+      --accent-primary-glow: rgba(240, 165, 0, 0.14);
+      --border-accent:       rgba(240, 165, 0, 0.30);
+      --accent-success:      #16a34a;
+      --accent-danger:       #dc2626;
+      --text-primary:        #1a2332;
+      --text-secondary:      #5a6d85;
+      --text-muted:          #8fa3b8;
+      --text-bright:         #0d1520;
+      --text-on-accent:      #05080f;
+      --text-on-color:       #ffffff;
+      --border-primary:      #d0dae8;
+      --body-gradient-amber: rgba(240, 165, 0, 0.045);
+      --body-gradient-info:  rgba(37, 99, 235, 0.030);
+    }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg-primary);
+      background-image:
+        radial-gradient(ellipse 80% 50% at 15% -10%, var(--body-gradient-amber) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 40% at 85% 110%, var(--body-gradient-info)  0%, transparent 70%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      -webkit-app-region: drag;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-top: 2px solid var(--accent-primary);
+      border-radius: 10px;
+      padding: 2rem 1.75rem;
+      max-width: 480px;
+      width: 100%;
+      -webkit-app-region: no-drag;
+    }
+
+    .logo { display: flex; align-items: center; gap: 14px; margin-bottom: 1.25rem; }
+    .logo-icon { width: 40px; height: 40px; color: var(--accent-primary); flex-shrink: 0; }
+    .logo h1 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .logo p {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--accent-primary);
+      opacity: 0.7;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .steps {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .step-dot {
+      flex: 1;
+      height: 4px;
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      transition: background 0.3s;
+    }
+    .step-dot.active { background: var(--accent-primary); }
+    .step-dot.done { background: var(--accent-success); }
+
+    .step-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin: -0.75rem 0 1rem;
+      gap: 0.25rem;
+    }
+    .step-labels span.active { color: var(--accent-primary); font-weight: 600; }
+    .step-labels span.done { color: var(--accent-success); }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .intro {
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      margin-bottom: 1.1rem;
+    }
+
+    .help-box {
+      background: var(--accent-primary-bg);
+      border: 1px solid var(--border-accent);
+      border-radius: 8px;
+      padding: 0.75rem 0.9rem;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.45;
+      margin-bottom: 1.1rem;
+    }
+    .help-box button {
+      background: none;
+      border: none;
+      color: var(--accent-primary);
+      cursor: pointer;
+      font: inherit;
+      padding: 0;
+      text-decoration: underline;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+
+    .field { margin-bottom: 0.85rem; }
+    .field label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+    .field input {
+      width: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      font-size: 0.92rem;
+      padding: 0.6rem 0.75rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: var(--accent-primary); }
+    .field-row { display: grid; grid-template-columns: 1fr 100px; gap: 0.65rem; }
+
+    .cashea-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .cashea-option {
+      position: relative;
+      cursor: pointer;
+    }
+    .cashea-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .cashea-option-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.75rem 0.5rem;
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      background: var(--bg-tertiary);
+      transition: border-color 0.15s, background 0.15s;
+      cursor: pointer;
+      text-align: center;
+    }
+    .cashea-option input[type="radio"]:checked + .cashea-option-box {
+      border-color: var(--accent-primary);
+      background: var(--accent-primary-bg);
+    }
+    .cashea-option-box .opt-title {
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: var(--text-primary);
+    }
+    .cashea-option-box .opt-desc {
+      font-size: 0.73rem;
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    .hwid-box {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-bottom: 1rem;
+    }
+    .hwid-code {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent-success);
+      flex: 1;
+      word-break: break-all;
+      letter-spacing: 0.04em;
+    }
+    .btn-copy {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.72rem;
+      white-space: nowrap;
+    }
+
+    .code-input {
+      width: 100%;
+      height: 48px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-align: center;
+      text-transform: uppercase;
+      padding: 0 0.75rem;
+    }
+    .code-input:focus {
+      outline: none;
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 3px var(--accent-primary-bg);
+    }
+    .code-hint {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+      text-align: center;
+    }
+
+    .status {
+      min-height: 1.2rem;
+      font-size: 0.82rem;
+      margin: 0.65rem 0 0.85rem;
+      line-height: 1.4;
+    }
+    .status.ok { color: var(--accent-success); }
+    .status.err { color: var(--accent-danger); }
+    .status.info { color: var(--text-secondary); }
+
+    .alert {
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      font-size: 0.82rem;
+      margin-bottom: 0.75rem;
+      display: none;
+      line-height: 1.45;
+    }
+    .alert.show { display: block; }
+    .alert-error { background: rgba(240,68,56,.1); border: 1px solid rgba(240,68,56,.3); color: var(--accent-danger); }
+    .alert-success { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: var(--accent-success); }
+
+    .progress-wrap { display: none; margin-bottom: 0.75rem; }
+    .progress-wrap.show { display: block; }
+    .progress-bar-outer {
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      height: 5px;
+      overflow: hidden;
+    }
+    .progress-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-primary);
+      transition: width 0.35s ease;
+    }
+    .progress-text {
+      font-size: 0.76rem;
+      color: var(--text-secondary);
+      margin-top: 0.35rem;
+      text-align: center;
+    }
+
+    .actions { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: var(--font-ui);
+      font-size: 0.92rem;
+      font-weight: 600;
+      padding: 0.7rem 1rem;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn:not(:disabled):active { transform: scale(0.99); }
+    .btn-primary { background: var(--accent-primary); color: var(--text-on-accent); }
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
+    }
+    .btn-link {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      padding: 0.25rem;
+      margin-top: 0.25rem;
+    }
+
+    .footnote {
+      margin-top: 1rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      font-family: var(--font-mono);
+    }
+  </style>
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var t = params.get('theme') || localStorage.getItem('nexus_theme') || 'dark';
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        try { localStorage.setItem('nexus_theme', t); } catch (e2) {}
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <polygon points="24,6 38,14 38,30 24,38 10,30 10,14" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="24" cy="22" r="3" fill="currentColor"/>
+      </svg>
+      <div>
+        <h1>Nexus Core</h1>
+        <p id="subtitle">Instalación</p>
+      </div>
+    </div>
+
+    <div class="steps" aria-hidden="true">
+      <div class="step-dot active" id="dot-2"></div>
+      <div class="step-dot" id="dot-3"></div>
+      <div class="step-dot" id="dot-4"></div>
+      <div class="step-dot" id="dot-5"></div>
+    </div>
+    <div class="step-labels">
+      <span id="label-2" class="active">1 · Licencia</span>
+      <span id="label-3">2 · Admin</span>
+      <span id="label-4">3 · Moneda</span>
+      <span id="label-5">4 · Empresa</span>
+    </div>
+
+    <!-- Paso 1: Licencia (la base de datos SQLite se crea sola, sin configuración) -->
+    <div class="panel active" id="panel-license">
+      <p class="intro" id="intro-license">
+        Activa tu licencia con el código recibido al comprar. Solo necesitas internet esta vez.
+      </p>
+      <div class="section-label">ID de este equipo (para soporte)</div>
+      <div class="hwid-box">
+        <span class="hwid-code" id="hwid-display">Cargando…</span>
+        <button type="button" class="btn-copy" id="btn-copy-hwid">Copiar</button>
+      </div>
+      <div class="section-label">Código de activación</div>
+      <input type="text" id="input-code" class="code-input" maxlength="24"
+             placeholder="NXCS-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+      <p class="code-hint">Ingresa la clave que recibiste al comprar. Los guiones se agregan solos.</p>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+        <p class="progress-text" id="progress-text"></p>
+      </div>
+      <div class="alert alert-error" id="alert-error"></div>
+      <div class="alert alert-success" id="alert-success"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btn-activar" disabled>Activar Nexus Core</button>
+      </div>
+    </div>
+
+    <!-- Paso 3: Administrador -->
+    <div class="panel" id="panel-admin">
+      <p class="intro">
+        Crea la cuenta del dueño o encargado del negocio. Será el administrador con acceso total al sistema.
+      </p>
+      <form id="admin-form" autocomplete="off">
+        <div class="field">
+          <label for="admin-nombre">Nombre completo</label>
+          <input id="admin-nombre" type="text" spellcheck="false" required maxlength="120">
+        </div>
+        <div class="field">
+          <label for="admin-username">Usuario de acceso</label>
+          <input id="admin-username" type="text" spellcheck="false" required maxlength="32"
+                 autocapitalize="none" autocomplete="username">
+          <p class="code-hint" style="margin-top:0.35rem;text-align:left;">
+            Minúsculas, números o _ (3–32 caracteres, empieza con letra).
+          </p>
+        </div>
+        <div class="field">
+          <label for="admin-password">Contraseña</label>
+          <input id="admin-password" type="password" autocomplete="new-password" required minlength="8">
+        </div>
+        <div class="field">
+          <label for="admin-password2">Confirmar contraseña</label>
+          <input id="admin-password2" type="password" autocomplete="new-password" required minlength="8">
+        </div>
+      </form>
+      <div class="status info" id="status-admin" role="status"></div>
+      <div class="alert alert-error" id="alert-admin-error"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btn-create-admin">Crear cuenta y finalizar</button>
+      </div>
+    </div>
+
+    <!-- Paso 4: Modo monetario -->
+    <div class="panel" id="panel-moneda">
+      <p class="intro" style="font-weight:600;color:var(--text-primary);font-size:0.98rem;">
+        ¿Cómo maneja tu negocio los precios?
+      </p>
+      <p class="intro" style="margin-top:-0.5rem;">
+        Elige la modalidad de tasas. Puedes cambiarla luego en Configuración → Tasas.
+      </p>
+      <div class="cashea-toggle" id="moneda-toggle" style="grid-template-columns:1fr;">
+        <label class="cashea-option">
+          <input type="radio" name="modo-moneda" id="modo-multimoneda" value="multimoneda" checked>
+          <div class="cashea-option-box" style="align-items:flex-start;text-align:left;">
+            <span class="opt-title">Multimoneda (BCV + USD)</span>
+            <span class="opt-desc">Tasa BCV oficial y tasa USD de mercado. Para quien cobra dólares físicos o usa dos referencias.</span>
+          </div>
+        </label>
+        <label class="cashea-option">
+          <input type="radio" name="modo-moneda" id="modo-solo-bcv" value="solo_bcv">
+          <div class="cashea-option-box" style="align-items:flex-start;text-align:left;">
+            <span class="opt-title">Solo BCV</span>
+            <span class="opt-desc">Una sola tasa: la BCV oficial. Más simple. Para quien solo usa bolívares o no maneja dólar calle.</span>
+          </div>
+        </label>
+      </div>
+      <div class="status info" id="status-moneda" role="status"></div>
+      <div class="alert alert-error" id="alert-moneda-error"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btn-continuar-moneda">Continuar</button>
+      </div>
+    </div>
+
+    <!-- Paso 5: Empresa & Cashea -->
+    <div class="panel" id="panel-empresa">
+      <p class="intro">
+        Configura los datos de tu negocio. Solo el nombre es obligatorio; el resto puede completarse luego en Configuración.
+      </p>
+      <form id="empresa-form" autocomplete="off">
+        <div class="field">
+          <label for="emp-nombre">Nombre del negocio <span style="color:var(--accent-primary)">*</span></label>
+          <input id="emp-nombre" type="text" spellcheck="false" required maxlength="120"
+                 placeholder="Ej: Ferretería Los Andes, C.A.">
+        </div>
+        <div class="field">
+          <label for="emp-rif">RIF <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+          <input id="emp-rif" type="text" spellcheck="false" maxlength="30" placeholder="Ej: J-12345678-9">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;">
+          <div class="field">
+            <label for="emp-telefono">Teléfono <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+            <input id="emp-telefono" type="text" spellcheck="false" maxlength="30" placeholder="0412-000.00.00">
+          </div>
+          <div class="field" style="min-width:0;">
+            <label for="emp-email">Email <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+            <input id="emp-email" type="email" spellcheck="false" maxlength="120" placeholder="info@negocio.com">
+          </div>
+        </div>
+        <div class="field">
+          <label for="emp-direccion">Dirección <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+          <input id="emp-direccion" type="text" spellcheck="false" maxlength="200" placeholder="Ciudad, Estado">
+        </div>
+
+        <div class="section-label" style="margin-top:0.85rem;">Modo Cashea</div>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.6rem;line-height:1.4;">
+          Selecciona la modalidad que usa tu negocio con Cashea. Puede cambiarse en Configuración → Cashea.
+        </p>
+        <div class="cashea-toggle">
+          <label class="cashea-option">
+            <input type="radio" name="cashea-modo" id="cashea-base" value="base" checked>
+            <div class="cashea-option-box">
+              <span class="opt-title">Base</span>
+              <span class="opt-desc">Cobro y financiamiento simple. Sin comisión Express.</span>
+            </div>
+          </label>
+          <label class="cashea-option">
+            <input type="radio" name="cashea-modo" id="cashea-express" value="express">
+            <div class="cashea-option-box">
+              <span class="opt-title">Express</span>
+              <span class="opt-desc">Pago rápido al comercio. Incluye comisión Express sobre financiado.</span>
+            </div>
+          </label>
+        </div>
+      </form>
+      <div class="status info" id="status-empresa" role="status"></div>
+      <div class="alert alert-error" id="alert-empresa-error"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btn-guardar-empresa">Finalizar configuración</button>
+        <button type="button" class="btn btn-link" id="btn-omitir-empresa">Omitir por ahora →</button>
+      </div>
+    </div>
+
+    <p class="footnote" id="footnote"></p>
+  </div>
+
+  <script src="services/expiraLicenciaUi.js"></script>
+  <script>
+    (function () {
+      var setupApi = window.nexusSetup;
+      if (!setupApi) return;
+
+      var currentStep = 2;
+      var busy = false;
+
+      var hwid = '';
+      var hwidCompat = null;
+      var serverUrl = 'https://nexuscore-iota.vercel.app';
+
+      var panelLicense = document.getElementById('panel-license');
+      var panelAdmin = document.getElementById('panel-admin');
+      var panelMoneda = document.getElementById('panel-moneda');
+      var panelEmpresa = document.getElementById('panel-empresa');
+      var statusAdmin = document.getElementById('status-admin');
+      var statusMoneda = document.getElementById('status-moneda');
+      var statusEmpresa = document.getElementById('status-empresa');
+      var alertAdminErr = document.getElementById('alert-admin-error');
+      var alertMonedaErr = document.getElementById('alert-moneda-error');
+      var alertEmpresaErr = document.getElementById('alert-empresa-error');
+      var btnCreateAdmin = document.getElementById('btn-create-admin');
+      var btnContinuarMoneda = document.getElementById('btn-continuar-moneda');
+      var btnGuardarEmpresa = document.getElementById('btn-guardar-empresa');
+      var btnOmitirEmpresa = document.getElementById('btn-omitir-empresa');
+      var btnActivar = document.getElementById('btn-activar');
+      var codeEl = document.getElementById('input-code');
+      var hwidEl = document.getElementById('hwid-display');
+      var btnCopyHwid = document.getElementById('btn-copy-hwid');
+      var alertErr = document.getElementById('alert-error');
+      var alertOk = document.getElementById('alert-success');
+      var progressWrap = document.getElementById('progress-wrap');
+      var progressBar = document.getElementById('progress-bar');
+      var progressTxt = document.getElementById('progress-text');
+      var dot2 = document.getElementById('dot-2');
+      var dot3 = document.getElementById('dot-3');
+      var dot4 = document.getElementById('dot-4');
+      var dot5 = document.getElementById('dot-5');
+      var label2 = document.getElementById('label-2');
+      var label3 = document.getElementById('label-3');
+      var label4 = document.getElementById('label-4');
+      var label5 = document.getElementById('label-5');
+      var subtitle = document.getElementById('subtitle');
+      var footnoteEl = document.getElementById('footnote');
+
+      // Pasos internos: 2 = licencia, 3 = admin, 4 = moneda, 5 = empresa
+      // (la BD SQLite se crea sola — ya no existe el paso de PostgreSQL).
+      function setStepUi(step) {
+        currentStep = step;
+        panelLicense.classList.toggle('active', step === 2);
+        panelAdmin.classList.toggle('active', step === 3);
+        panelMoneda.classList.toggle('active', step === 4);
+        panelEmpresa.classList.toggle('active', step === 5);
+        dot2.className = 'step-dot' + (step > 2 ? ' done' : (step === 2 ? ' active' : ''));
+        dot3.className = 'step-dot' + (step > 3 ? ' done' : (step === 3 ? ' active' : ''));
+        dot4.className = 'step-dot' + (step > 4 ? ' done' : (step === 4 ? ' active' : ''));
+        dot5.className = 'step-dot' + (step === 5 ? ' active' : '');
+        label2.className = step > 2 ? 'done' : (step === 2 ? 'active' : '');
+        label3.className = step > 3 ? 'done' : (step === 3 ? 'active' : '');
+        label4.className = step > 4 ? 'done' : (step === 4 ? 'active' : '');
+        label5.className = step === 5 ? 'active' : '';
+        if (step === 2) subtitle.textContent = 'Paso 1 · Licencia';
+        else if (step === 3) subtitle.textContent = 'Paso 2 · Administrador';
+        else if (step === 4) subtitle.textContent = 'Paso 3 · Moneda';
+        else subtitle.textContent = 'Paso 4 · Tu empresa';
+      }
+
+      function setAdminStatus(text, kind) {
+        statusAdmin.textContent = text || '';
+        statusAdmin.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function showAdminError(msg) {
+        alertAdminErr.textContent = msg;
+        alertAdminErr.classList.add('show');
+      }
+
+      function hideAdminError() {
+        alertAdminErr.classList.remove('show');
+        alertAdminErr.textContent = '';
+      }
+
+      function setEmpresaStatus(text, kind) {
+        statusEmpresa.textContent = text || '';
+        statusEmpresa.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function showEmpresaError(msg) {
+        alertEmpresaErr.textContent = msg;
+        alertEmpresaErr.classList.add('show');
+      }
+
+      function hideEmpresaError() {
+        alertEmpresaErr.classList.remove('show');
+        alertEmpresaErr.textContent = '';
+      }
+
+      function fetchSetupAdminEstado() {
+        return fetch('http://127.0.0.1:3000/api/setup/estado')
+          .then(function (r) { return r.json(); })
+          .catch(function () { return { adminPendiente: true }; });
+      }
+
+      function finishOnboarding() {
+        if (window.nexusLicense && typeof window.nexusLicense.confirmed === 'function') {
+          window.nexusLicense.confirmed();
+        }
+      }
+
+      function setMonedaStatus(text, kind) {
+        statusMoneda.textContent = text || '';
+        statusMoneda.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function showMonedaError(msg) {
+        alertMonedaErr.textContent = msg;
+        alertMonedaErr.classList.add('show');
+      }
+
+      function hideMonedaError() {
+        alertMonedaErr.classList.remove('show');
+        alertMonedaErr.textContent = '';
+      }
+
+      function goToMonedaStep() {
+        hideMonedaError();
+        setMonedaStatus('', '');
+        busy = false;
+        if (btnContinuarMoneda) { btnContinuarMoneda.disabled = false; btnContinuarMoneda.textContent = 'Continuar'; }
+        setStepUi(4);
+      }
+
+      function goToEmpresaStep() {
+        hideEmpresaError();
+        setEmpresaStatus('', '');
+        busy = false;
+        if (btnGuardarEmpresa) btnGuardarEmpresa.disabled = false;
+        setStepUi(5);
+      }
+
+      function proceedAfterLicense() {
+        setLicenseProgress(100, 'Verificando configuración inicial…');
+        fetchSetupAdminEstado().then(function (estado) {
+          progressWrap.classList.remove('show');
+          if (estado && estado.adminPendiente) {
+            hideAdminError();
+            setAdminStatus('', '');
+            setStepUi(3);
+          } else {
+            goToEmpresaStep();
+          }
+        }).catch(function () {
+          progressWrap.classList.remove('show');
+          goToEmpresaStep();
+        });
+      }
+
+      function hideLicenseAlerts() {
+        alertErr.classList.remove('show');
+        alertOk.classList.remove('show');
+      }
+
+      function showLicenseError(msg) {
+        alertErr.textContent = msg;
+        alertErr.classList.add('show');
+        alertOk.classList.remove('show');
+      }
+
+      function showLicenseSuccess(msg) {
+        alertOk.textContent = msg;
+        alertOk.classList.add('show');
+        alertErr.classList.remove('show');
+      }
+
+      function setLicenseProgress(pct, msg) {
+        progressWrap.classList.add('show');
+        progressBar.style.width = pct + '%';
+        progressTxt.textContent = msg;
+      }
+
+      var HWID_ERROR_VALUES = ['HWID-UNKNOWN', 'HWID-UNAVAILABLE', 'HWID-ERROR'];
+
+      function isHwidError(h) {
+        return !h || HWID_ERROR_VALUES.indexOf(h) !== -1;
+      }
+
+      function updateHwidErrorState() {
+        if (isHwidError(hwid)) {
+          btnActivar.disabled = true;
+          showLicenseError(
+            'No se pudo obtener el identificador de hardware de este equipo. ' +
+            'Reinicia la aplicación e intenta nuevamente. ' +
+            'Si el problema persiste, contacta al soporte técnico.'
+          );
+        }
+      }
+
+      function initLicensePanel() {
+        hideLicenseAlerts();
+        progressWrap.classList.remove('show');
+
+        var bundlePromise;
+        if (window.nexusCore && typeof window.nexusCore.getHardwareIdBundle === 'function') {
+          bundlePromise = window.nexusCore.getHardwareIdBundle().then(function (b) {
+            hwid = (b && b.hwid) || 'HWID-UNKNOWN';
+            hwidCompat = b && b.hwidCompat ? b.hwidCompat : null;
+          });
+        } else {
+          bundlePromise = Promise.resolve().then(function () {
+            hwid = 'HWID-UNAVAILABLE';
+          });
+        }
+
+        var urlPromise = window.nexusLicense && typeof window.nexusLicense.getServerUrl === 'function'
+          ? window.nexusLicense.getServerUrl()
+          : Promise.resolve(serverUrl);
+
+        return Promise.all([bundlePromise, urlPromise]).then(function (results) {
+          serverUrl = results[1] || serverUrl;
+          hwidEl.textContent = hwid;
+          updateHwidErrorState();
+        }).catch(function () {
+          hwid = 'HWID-ERROR';
+          hwidEl.textContent = hwid;
+          updateHwidErrorState();
+        });
+      }
+
+      setupApi.getVersion().then(function (v) {
+        footnoteEl.textContent = 'Nexus Core v' + (v || '?');
+      }).catch(function () {});
+
+      btnCopyHwid.addEventListener('click', function () {
+        if (!hwid) return;
+        navigator.clipboard.writeText(hwid).then(function () {
+          btnCopyHwid.textContent = 'Copiado';
+          setTimeout(function () { btnCopyHwid.textContent = 'Copiar'; }, 1600);
+        });
+      });
+
+      codeEl.addEventListener('input', function () {
+        var raw = codeEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (raw.indexOf('NXCS') === 0) raw = raw.slice(4);
+        raw = raw.slice(0, 16);
+        var groups = [];
+        for (var i = 0; i < raw.length; i += 4) groups.push(raw.slice(i, i + 4));
+        codeEl.value = 'NXCS' + (groups.length ? '-' + groups.join('-') : (raw.length ? '-' : ''));
+        btnActivar.disabled = raw.length < 16 || isHwidError(hwid);
+        hideLicenseAlerts();
+      });
+
+      btnCreateAdmin.addEventListener('click', function () {
+        if (busy) return;
+        hideAdminError();
+        var nombre = document.getElementById('admin-nombre').value.trim();
+        var username = document.getElementById('admin-username').value.trim().toLowerCase();
+        var password = document.getElementById('admin-password').value;
+        var password2 = document.getElementById('admin-password2').value;
+
+        if (!nombre || nombre.length < 2) {
+          showAdminError('El nombre completo es obligatorio.');
+          return;
+        }
+        if (!username || username.length < 3) {
+          showAdminError('El usuario debe tener al menos 3 caracteres.');
+          return;
+        }
+        if (!/^[a-z][a-z0-9_]{2,31}$/.test(username)) {
+          showAdminError('Usuario inválido: minúsculas, números o _ (empieza con letra).');
+          return;
+        }
+        if (!password || password.length < 8) {
+          showAdminError('La contraseña debe tener al menos 8 caracteres.');
+          return;
+        }
+        if (password !== password2) {
+          showAdminError('Las contraseñas no coinciden.');
+          return;
+        }
+
+        busy = true;
+        btnCreateAdmin.disabled = true;
+        setAdminStatus('Creando cuenta de administrador…', 'info');
+
+        fetch('http://127.0.0.1:3000/api/setup/admin-inicial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre_completo: nombre,
+            username: username,
+            password: password,
+            password_confirm: password2
+          })
+        })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            if (!r.ok) throw new Error(d.error || d.message || 'No se pudo crear la cuenta.');
+            return d;
+          });
+        })
+        .then(function () {
+          setAdminStatus('Cuenta creada. Continuando…', 'ok');
+          busy = false;
+          btnCreateAdmin.disabled = false;
+          setTimeout(goToMonedaStep, 600);
+        })
+        .catch(function (e) {
+          showAdminError(e.message || 'Error al crear la cuenta.');
+          setAdminStatus('', '');
+          btnCreateAdmin.disabled = false;
+          busy = false;
+        });
+      });
+
+      function licenseReasonMessage(res) {
+        var r = res || {};
+        if (r.reason === 'offline') return 'Sin conexión a internet. Conéctate para activar.';
+        if (r.message) return r.message;
+        if (r.reason === 'rejected') return 'Licencia inválida o ya en uso en otra máquina.';
+        return 'No se pudo activar. Verifica la clave e intenta de nuevo.';
+      }
+
+      btnActivar.addEventListener('click', function () {
+        var key = codeEl.value.trim();
+        if (!key || btnActivar.disabled || isHwidError(hwid)) return;
+        if (!navigator.onLine) {
+          showLicenseError('Sin conexión a internet. Conéctate para activar.');
+          return;
+        }
+        var L = window.nexusLicense || {};
+        if (!L.activate) {
+          showLicenseError('Activación no disponible en este entorno.');
+          return;
+        }
+
+        btnActivar.disabled = true;
+        btnActivar.textContent = 'Activando…';
+        hideLicenseAlerts();
+        setLicenseProgress(15, 'Conectando al servidor de licencias…');
+
+        L.activate(key).then(function (res) {
+          if (res && res.ok) {
+            setLicenseProgress(100, '¡Licencia activada!');
+            var info = res.info || {};
+            var expTxt = info.expiresAt
+              ? (typeof window.formatExpiraLicenciaUi === 'function'
+                ? window.formatExpiraLicenciaUi(info.expiresAt) : info.expiresAt)
+              : 'Sin fecha límite';
+            showLicenseSuccess(
+              'Activado · ' + (info.customerName ? info.customerName + ' · ' : '') +
+              'Vence: ' + expTxt + '. Continuando…'
+            );
+            setTimeout(proceedAfterLicense, 1200);
+            return;
+          }
+          progressWrap.classList.remove('show');
+          showLicenseError(licenseReasonMessage(res));
+          btnActivar.disabled = false;
+          btnActivar.textContent = 'Activar Nexus Core';
+        }).catch(function (e) {
+          progressWrap.classList.remove('show');
+          showLicenseError((e && e.message) || 'Error al activar.');
+          btnActivar.disabled = false;
+          btnActivar.textContent = 'Activar Nexus Core';
+        });
+      });
+
+      btnContinuarMoneda.addEventListener('click', function () {
+        if (busy) return;
+        hideMonedaError();
+        var checked = document.querySelector('input[name="modo-moneda"]:checked');
+        var modo = checked && checked.value === 'solo_bcv' ? 'solo_bcv' : 'multimoneda';
+
+        busy = true;
+        btnContinuarMoneda.disabled = true;
+        btnContinuarMoneda.textContent = 'Guardando…';
+        setMonedaStatus('Guardando preferencia de moneda…', 'info');
+
+        fetch('http://127.0.0.1:3000/api/setup/modo-moneda-inicial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modo_moneda_operacion: modo })
+        })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            if (!r.ok) throw new Error(d.error || d.message || 'No se pudo guardar el modo.');
+            return d;
+          });
+        })
+        .then(function () {
+          busy = false;
+          btnContinuarMoneda.disabled = false;
+          btnContinuarMoneda.textContent = 'Continuar';
+          goToEmpresaStep();
+        })
+        .catch(function (e) {
+          showMonedaError(e.message || 'Error al guardar el modo de moneda.');
+          setMonedaStatus('', '');
+          btnContinuarMoneda.disabled = false;
+          btnContinuarMoneda.textContent = 'Continuar';
+          busy = false;
+        });
+      });
+
+      btnGuardarEmpresa.addEventListener('click', function () {
+        if (busy) return;
+        hideEmpresaError();
+        var nombre = document.getElementById('emp-nombre').value.trim();
+        if (!nombre || nombre.length < 2) {
+          showEmpresaError('El nombre del negocio es obligatorio.');
+          return;
+        }
+        var modoChecked = document.querySelector('input[name="cashea-modo"]:checked');
+        var casheaModoExpress = modoChecked && modoChecked.value === 'express';
+
+        busy = true;
+        btnGuardarEmpresa.disabled = true;
+        setEmpresaStatus('Guardando configuración…', 'info');
+
+        fetch('http://127.0.0.1:3000/api/setup/empresa-cashea-inicial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            empresa_nombre: nombre,
+            empresa_rif: document.getElementById('emp-rif').value.trim(),
+            empresa_telefono: document.getElementById('emp-telefono').value.trim(),
+            empresa_email: document.getElementById('emp-email').value.trim(),
+            empresa_direccion: document.getElementById('emp-direccion').value.trim(),
+            cashea_modo_express: casheaModoExpress
+          })
+        })
+        .then(function (r) {
+          return r.json().then(function (d) {
+            if (!r.ok) throw new Error(d.error || d.message || 'No se pudo guardar.');
+            return d;
+          });
+        })
+        .then(function () {
+          setEmpresaStatus('¡Listo! Iniciando Nexus Core…', 'ok');
+          setTimeout(finishOnboarding, 600);
+        })
+        .catch(function (e) {
+          showEmpresaError(e.message || 'Error al guardar la configuración.');
+          setEmpresaStatus('', '');
+          btnGuardarEmpresa.disabled = false;
+          busy = false;
+        });
+      });
+
+      btnOmitirEmpresa.addEventListener('click', function () {
+        finishOnboarding();
+      });
+
+      setupApi.getInitialStep().then(function (init) {
+        var step = init && init.step === 3 ? 3 : 2;
+        var renewalOnly = !!(init && init.renewalOnly);
+        var reason = init && init.licenseReason ? String(init.licenseReason) : '';
+
+        if (renewalOnly) {
+          var introLicense = document.getElementById('intro-license');
+          if (reason && /expirada/i.test(reason)) {
+            introLicense.textContent =
+              'Tu licencia de prueba venció. Ingresa el código permanente que te envió tu proveedor para seguir usando Nexus Core.';
+          } else if (reason) {
+            introLicense.textContent = reason + ' Ingresa una clave de activación válida para continuar.';
+          } else {
+            introLicense.textContent =
+              'Ingresa una clave de activación válida para continuar usando Nexus Core.';
+          }
+          subtitle.textContent = 'Renovar licencia';
+        }
+
+        if (step === 3) {
+          setStepUi(3);
+          hideAdminError();
+          setupApi.prepareLicenseStep().then(function (prep) {
+            if (prep && !prep.ok) {
+              showAdminError(prep.message || 'No se pudo conectar al sistema.');
+            }
+          });
+        } else {
+          setStepUi(2);
+          setupApi.prepareLicenseStep().then(function (prep) {
+            if (prep && prep.licenseActive) {
+              proceedAfterLicense();
+              return;
+            }
+            if (prep && !prep.ok) {
+              showLicenseError(prep.message || 'No se pudo iniciar el sistema.');
+              return;
+            }
+            initLicensePanel();
+          });
+        }
+      }).catch(function () {
+        setStepUi(2);
+        initLicensePanel();
+      });
+    })();
+  </script>
+</body>
+</html>

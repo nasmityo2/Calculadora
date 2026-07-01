@@ -1,0 +1,152 @@
+'use strict';
+
+/**
+ * lib/validate.js — Validación de entradas y headers de seguridad
+ *
+ * REGLAS:
+ *  - Toda entrada se sanitiza estrictamente antes de procesarse.
+ *  - Los headers de seguridad se añaden en TODAS las respuestas.
+ *  - Los mensajes de error nunca revelan información interna.
+ *  - El formato del HWID se valida para evitar inyecciones o valores triviales.
+ */
+
+const { logAdminAuthRejected, logServerMisconfig } = require('./logger');
+
+// Formato esperado del código: NC-XXXXX-XXXXX-XXXXX
+const CODE_REGEX = /^NC-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/i;
+
+// Formato de license key del sistema profesional: NXCS-XXXX-XXXX-XXXX-XXXX
+// (alfabeto restringido sin caracteres ambiguos — alineado con lib/licenses.js)
+const LICENSE_KEY_REGEX = /^NXCS-[ACDEFGHJKLMNPQRTUVWXY3467]{4}-[ACDEFGHJKLMNPQRTUVWXY3467]{4}-[ACDEFGHJKLMNPQRTUVWXY3467]{4}-[ACDEFGHJKLMNPQRTUVWXY3467]{4}$/;
+
+// HWID: UUID estándar o cadena hexadecimal de 8-128 caracteres (SHA-256 = 64 hex)
+const HWID_REGEX = /^[0-9a-f\-]{8,128}$/i;
+
+/**
+ * Valida y normaliza la entrada de un cliente para el sistema de licencias profesional
+ * (activate/verify/deactivate). Lanza Error con .status si algo es inválido.
+ * @param {object} body
+ * @param {{ requireToken?: boolean }} [opts]
+ */
+function validateLicenseClientInput(body, opts = {}) {
+  const raw = body || {};
+  const licenseKey = String(raw.licenseKey || raw.license_key || '').trim().toUpperCase();
+  if (!licenseKey) { const e = new Error('El campo "licenseKey" es obligatorio.'); e.status = 400; throw e; }
+  if (!LICENSE_KEY_REGEX.test(licenseKey)) {
+    const e = new Error('Formato de licencia inválido.'); e.status = 400; throw e;
+  }
+
+  const hwid = String(raw.hwid || '').trim().toLowerCase();
+  if (!hwid) { const e = new Error('El campo "hwid" es obligatorio.'); e.status = 400; throw e; }
+  if (!HWID_REGEX.test(hwid)) { const e = new Error('Formato de Hardware ID inválido.'); e.status = 400; throw e; }
+  if (/^(.)\1+$/.test(hwid.replace(/-/g, ''))) {
+    const e = new Error('Hardware ID no válido para este sistema.'); e.status = 400; throw e;
+  }
+
+  const machineName = String(raw.machineName || raw.machine_name || '').trim().slice(0, 120);
+  const appVersion = String(raw.appVersion || raw.app_version || '').trim().slice(0, 40);
+
+  let token;
+  if (opts.requireToken) {
+    token = String(raw.token || '').trim();
+    if (!token || token.length < 16 || token.length > 4096) {
+      const e = new Error('El campo "token" es obligatorio.'); e.status = 400; throw e;
+    }
+  }
+
+  return { licenseKey, hwid, machineName, appVersion, token };
+}
+
+/**
+ * Valida y normaliza los datos de una solicitud de activación.
+ * Lanza un Error con .status = 400 si hay problemas.
+ */
+function validateActivationInput(body) {
+  const raw = body || {};
+
+  const code = String(raw.code || '').trim().toUpperCase();
+  if (!code) {
+    const e = new Error('El campo "code" es obligatorio.'); e.status = 400; throw e;
+  }
+  if (!CODE_REGEX.test(code)) {
+    const e = new Error('Formato de código inválido.'); e.status = 400; throw e;
+  }
+
+  const hwid = String(raw.hwid || '').trim().toLowerCase();
+  if (!hwid) {
+    const e = new Error('El campo "hwid" es obligatorio.'); e.status = 400; throw e;
+  }
+  if (!HWID_REGEX.test(hwid)) {
+    const e = new Error('Formato de Hardware ID inválido.'); e.status = 400; throw e;
+  }
+  // Rechaza HWIDs triviales (todos ceros, todos iguales) que indican un cliente falso
+  if (/^(.)\1+$/.test(hwid.replace(/-/g, ''))) {
+    const e = new Error('Hardware ID no válido para este sistema.'); e.status = 400; throw e;
+  }
+
+  return { code, hwid };
+}
+
+/**
+ * Verifica la clave de administración en tiempo constante.
+ * Lanza un Error con .status = 401 si no autorizado.
+ */
+function validateAdminAuth(req, scope = 'admin') {
+  const { timingSafeEqual, createHash } = require('crypto');
+  const expectedKey = process.env.NEXUS_ADMIN_API_KEY;
+  if (!expectedKey) {
+    logServerMisconfig(scope, 'missing_NEXUS_ADMIN_API_KEY');
+    const e = new Error('Servidor mal configurado.'); e.status = 500; throw e;
+  }
+
+  const authHeader = String(req.headers['authorization'] || '');
+  const provided   = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+  // Comparación en tiempo constante → no se filtra si la clave es correcta por timing
+  const hash = (s) => createHash('sha256').update(s).digest();
+  const a = hash(provided);
+  const b = hash(expectedKey);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    logAdminAuthRejected(req, scope);
+    const e = new Error('No autorizado.'); e.status = 401; throw e;
+  }
+}
+
+/**
+ * Aplica headers de seguridad estándar a todas las respuestas.
+ */
+function applySecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options',  'nosniff');
+  res.setHeader('X-Frame-Options',         'DENY');
+  res.setHeader('X-XSS-Protection',        '1; mode=block');
+  res.setHeader('Referrer-Policy',         'no-referrer');
+  res.setHeader('Cache-Control',           'no-store, no-cache, must-revalidate');
+  res.setHeader('Content-Type',            'application/json; charset=utf-8');
+}
+
+/**
+ * Envía una respuesta de error normalizada.
+ * Nunca expone stack traces ni detalles internos en producción.
+ */
+function sendError(res, status, message) {
+  applySecurityHeaders(res);
+  res.status(status).json({ ok: false, error: message });
+}
+
+/**
+ * Envía una respuesta de éxito.
+ */
+function sendOk(res, data) {
+  applySecurityHeaders(res);
+  res.status(200).json({ ok: true, ...data });
+}
+
+module.exports = {
+  validateActivationInput,
+  validateLicenseClientInput,
+  validateAdminAuth,
+  applySecurityHeaders,
+  sendError,
+  sendOk,
+  LICENSE_KEY_REGEX
+};
