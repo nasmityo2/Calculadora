@@ -2449,7 +2449,7 @@
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         }) +
-        ' BCV'
+        (window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv() ? ' USD' : ' BCV')
       );
     }
 
@@ -2464,7 +2464,7 @@
       if (!d || typeof d !== 'object') return '';
       var refIni = Number(d.refInicialUsdBcv);
       if (Number.isFinite(refIni) && refIni > 0) {
-        return '$' + formatRefUsdBcv(refIni) + ' BCV';
+        return '$' + formatRefUsdBcv(refIni) + (window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv() ? ' USD' : ' BCV');
       }
       var mi = Number(d.montoInicial);
       var tu = Number(d.totalVentaUsd);
@@ -2473,7 +2473,7 @@
       if (!Number.isFinite(tRef) || tRef <= 0) tRef = Number(cartTotals().totalUsdBcvRef) || 0;
       if (mi > 0 && tu > 0 && tRef > 0) {
         var r = (mi / tu) * tRef;
-        return '$' + formatRefUsdBcv(r) + ' BCV';
+        return '$' + formatRefUsdBcv(r) + (window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv() ? ' USD' : ' BCV');
       }
       return '';
     }
@@ -2499,7 +2499,7 @@
       var usd =
         tramo === 'inicial' ? Number(d.montoInicial || 0) : Number(d.montoPrestado || 0);
       if (Number.isFinite(bs) && bs >= 0 && Number.isFinite(ref) && ref >= 0) {
-        return 'Bs. ' + formatBs(bs) + ' · $' + formatRefUsdBcv(ref) + ' BCV';
+        return 'Bs. ' + formatBs(bs) + ' · $' + formatRefUsdBcv(ref) + (window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv() ? ' USD' : ' BCV');
       }
       if (Number.isFinite(bs) && bs >= 0) {
         return 'Bs. ' + formatBs(bs);
@@ -3292,7 +3292,7 @@
       var descUsd = round4(bruto * (g / 100));
       if (cobroBannerTotalUsdBcv)
         cobroBannerTotalUsdBcv.textContent =
-          'TOTAL $' + formatRefUsdBcv(totals.totalUsdBcvRef) + ' BCV';
+          'TOTAL $' + formatRefUsdBcv(totals.totalUsdBcvRef) + (window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv() ? ' USD' : ' BCV');
       if (cobroBannerTotalBs)
         cobroBannerTotalBs.textContent = 'Bs.\u00A0' + formatBs(totals.totalBsBcv);
 
