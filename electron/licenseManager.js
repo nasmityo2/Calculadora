@@ -160,10 +160,33 @@ function buildHardwareResult(hw, options = {}) {
   return { hwid, components: used, detail };
 }
 
+// HWID canónico ESTABLE: un solo identificador fuerte por prioridad, presencia-estable.
+// NUNCA incluye disco (su orden cambia con USB/externos). UUID de SMBIOS es el más estable.
+function buildCanonicalHwid(hw) {
+  const os = require('os');
+  const detail = { cpu: false, board: false, uuid: false, disk: false, mac: false, host: false };
+  let part = null, used = null;
+  if (hw.UUID)       { part = 'uuid:'  + hw.UUID;  used = 'uuid';  detail.uuid  = true; }
+  else if (hw.CPU)   { part = 'cpu:'   + hw.CPU;   used = 'cpu';   detail.cpu   = true; }
+  else if (hw.BOARD) { part = 'board:' + hw.BOARD; used = 'board'; detail.board = true; }
+  if (!part) {
+    try {
+      const ifaces = os.networkInterfaces(); const macSet = new Set();
+      for (const name of Object.keys(ifaces)) for (const ifc of ifaces[name] || []) {
+        if (!ifc.internal && ifc.mac && ifc.mac !== '00:00:00:00:00:00') macSet.add(ifc.mac.toLowerCase());
+      }
+      if (macSet.size) { part = 'mac:' + [...macSet].sort().join(','); used = 'mac'; detail.mac = true; }
+    } catch (_e) { /* sin red */ }
+    if (!part) { part = 'host:' + os.hostname(); used = 'host'; detail.host = true; }
+  }
+  const hwid = crypto.createHash('sha256').update(part).digest('hex');
+  return { hwid, components: [used], detail };
+}
+
 function computeHardwareId() {
   if (_hwidCache) return _hwidCache;
   const hw = readWindowsHardwareIds();
-  _hwidCache = buildHardwareResult(hw, { allowOsFallback: true });
+  _hwidCache = buildCanonicalHwid(hw);
   return _hwidCache;
 }
 
@@ -182,24 +205,23 @@ function addUniqueHwid(list, hwid) {
 function computeWindowsHardwareHwidVariants(timeoutMs = CIM_TIMEOUT_MS) {
   const hw = readWindowsHardwareIds(timeoutMs);
   const out = [];
-  const disks = [
-    hw.DISK,
-    ...(Array.isArray(hw.DISKS) ? hw.DISKS : [])
-  ].filter(Boolean);
 
-  const primary = buildHardwareResult(hw, { allowOsFallback: false });
-  if (primary && usesWindowsHardware(primary)) addUniqueHwid(out, primary.hwid);
-
-  // Candidato sin disco: permite recuperar si Windows cambió el disco "primero" o si un
-  // USB/SSD externo alteró el orden de Win32_DiskDrive.
-  const noDisk = buildHardwareResult({ ...hw, DISK: null }, { disk: null, allowOsFallback: false });
-  if (noDisk && usesWindowsHardware(noDisk)) addUniqueHwid(out, noDisk.hwid);
-
-  for (const disk of disks) {
-    const withDisk = buildHardwareResult({ ...hw, DISK: disk }, { allowOsFallback: false });
-    if (withDisk && usesWindowsHardware(withDisk)) addUniqueHwid(out, withDisk.hwid);
+  // Formas canónicas nuevas (single-field): tokens emitidos tras este fix.
+  for (const single of [{ UUID: hw.UUID }, { CPU: hw.CPU }, { BOARD: hw.BOARD }]) {
+    const r = buildCanonicalHwid(single);
+    if (r && usesWindowsHardware(r)) addUniqueHwid(out, r.hwid);
   }
 
+  // Formas legadas concatenadas (cpu|uuid|board|disk): tokens emitidos ANTES del fix.
+  const disks = [hw.DISK, ...(Array.isArray(hw.DISKS) ? hw.DISKS : [])].filter(Boolean);
+  const primary = buildHardwareResult(hw, { allowOsFallback: false });
+  if (primary && usesWindowsHardware(primary)) addUniqueHwid(out, primary.hwid);
+  const noDisk = buildHardwareResult({ ...hw, DISK: null }, { disk: null, allowOsFallback: false });
+  if (noDisk && usesWindowsHardware(noDisk)) addUniqueHwid(out, noDisk.hwid);
+  for (const disk of disks) {
+    const withDisk = buildHardwareResult({ ...hw, DISK: disk }, { disk, allowOsFallback: false });
+    if (withDisk && usesWindowsHardware(withDisk)) addUniqueHwid(out, withDisk.hwid);
+  }
   return out;
 }
 
@@ -604,11 +626,9 @@ async function verifyOnline(app) {
  * Evaluación de arranque (sin red). Verifica integridad + firma + expiración + período de gracia.
  * @returns {{ ok:boolean, state:string, reason?:string, info?:object, needsOnlineSoon?:boolean, licenseKey?:string }}
  *   state: 'none' | 'tampered' | 'foreign' | 'expired' | 'suspended' | 'revoked' |
- *          'grace_exceeded' | 'hwid_drifted' | 'ok'
+ *          'grace_exceeded' | 'clock_rollback' | 'ok'
  *
- *   'hwid_drifted': el token es criptográficamente válido para un HWID alternativo conocido
- *   (cambio CIM↔MAC). Se incluye licenseKey para que evaluateLicenseGate() pueda hacer
- *   re-activación silenciosa sin interrumpir al usuario.
+ *   Variantes HWID del mismo equipo se reconcilian offline (sin reactivación online).
  */
 function evaluate(app) {
   // Usar resolveHwid para obtener el HWID más estable disponible (CIM > caché > MAC).
@@ -628,7 +648,6 @@ function evaluate(app) {
   }
 
   // Verificación criptográfica offline del token.
-  const currentHasHardware = usesWindowsHardware(computeHardwareId());
   let tokenHwid = hwid;
   let off = verifyTokenOffline(local.token, tokenHwid);
   if (!off.ok) {
@@ -637,30 +656,26 @@ function evaluate(app) {
     // Si el arranque actual no tiene IDs de hardware reales (CIM falló), el alternativo es
     // la identidad buena y podemos continuar offline. Si sí hay hardware real pero difiere,
     // se pide reactivación silenciosa para emitir un token del HWID actual.
-    if (/otro equipo/i.test(off.motivo) && local.licenseKey) {
+    if (/otro equipo/i.test(off.motivo)) {
+      // El token puede ser válido para OTRA identidad derivada de ESTE mismo equipo
+      // (cambió la composición de IDs entre sesiones: disco/placa/CIM). No es fraude ni
+      // requiere internet: si valida contra cualquier variante de este hardware, se acepta
+      // offline y se re-ancla al HWID canónico actual. En otra máquina, ninguna variante
+      // coincidiría con payload.h, por lo que el vínculo por equipo se mantiene.
       const altHwids = new Set([
         local.__decryptedWithHwid,
         computeMacFallbackHwid(),
+        ...computeWindowsHardwareHwidVariants(CIM_RECOVERY_TIMEOUT_MS),
         ...(app ? loadHwidCacheCandidates(app) : [])
-      ].filter(h => h && h !== hwid));
+      ].filter((h) => h && h !== hwid));
 
       for (const altHwid of altHwids) {
         const altOff = verifyTokenOffline(local.token, altHwid);
         if (altOff.ok) {
-          if (!currentHasHardware) {
-            tokenHwid = altHwid;
-            off = altOff;
-            saveHwidCache(app, altHwid, [hwid]);
-            break;
-          }
-          // Token válido para un HWID anterior conocido → HWID derivó, no es fraude.
-          return {
-            ok: false,
-            state: 'hwid_drifted',
-            reason: 'El identificador de hardware cambió entre sesiones; reconectando con el servidor...',
-            licenseKey: local.licenseKey,
-            info: publicInfo(local)
-          };
+          tokenHwid = altHwid;
+          off = altOff;
+          saveHwidCache(app, hwid, [altHwid]); // ancla el canónico actual, recuerda el alterno
+          break;
         }
       }
     }
