@@ -2,6 +2,7 @@
   "name": "nexus-core",
   "version": "1.0.0",
   "description": "Nexus Core ERP/POS — escritorio Windows (Win7+)",
+  "author": "Nexus Core",
   "main": "electron/main.js",
   "private": true,
   "engines": {
@@ -40,7 +41,6 @@
     "multer": "^2.1.1",
     "node-thermal-printer": "^4.6.0",
     "qrcode": "^1.5.4",
-    "quagga": "^0.12.1",
     "svg2pdf.js": "^2.2.3",
     "winston": "^3.11.0"
   },
