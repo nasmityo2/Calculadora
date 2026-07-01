@@ -2,6 +2,16 @@
 
 const express = require('express');
 const router = express.Router();
+
+// AUD-SEC: la configuración inicial es LOCAL. En modo red (0.0.0.0) NO debe ser accesible
+// desde la LAN: solo se permite desde loopback (el asistente corre en el mismo equipo).
+router.use((req, res, next) => {
+  const raw = (req.socket && req.socket.remoteAddress) || req.ip || '';
+  const ip = String(raw).replace(/^::ffff:/, '');
+  if (ip === '127.0.0.1' || ip === '::1') return next();
+  return res.status(403).json({ error: 'La configuración inicial solo está disponible en el equipo local.' });
+});
+
 const { asyncHandler, httpError } = require('../utils/asyncHandler');
 const setupAdminService = require('../services/setupAdminService');
 

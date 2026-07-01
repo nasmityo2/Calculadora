@@ -10,26 +10,26 @@ const _DEV_FALLBACK = 'nexus-core-dev-jwt-secret-cambiar-en-produccion';
  * En producción lanza un error explícito si no está configurado o usa el fallback público.
  */
 function getJwtSecret() {
-  const secret = process.env.JWT_SECRET || _DEV_FALLBACK;
-  const isProduction = process.env.NODE_ENV === 'production';
-  const usingFallback = secret === _DEV_FALLBACK;
+  const isDev = process.env.NODE_ENV === 'development';
+  const secret = process.env.JWT_SECRET;
+  const usingFallback = !secret || secret === _DEV_FALLBACK;
 
-  if (isProduction && usingFallback) {
+  // Fuera de development (incluye NODE_ENV vacío/indefinido) el fallback público está PROHIBIDO.
+  if (!isDev && usingFallback) {
     throw new Error(
-      '[Nexus-Core] JWT_SECRET no configurado o usa el valor por defecto inseguro. ' +
-      'Define JWT_SECRET en el entorno de producción antes de iniciar el servidor.'
+      '[Nexus-Core] JWT_SECRET obligatorio fuera de development. ' +
+      'Define JWT_SECRET (>= 32 caracteres) en el entorno antes de iniciar.'
     );
   }
-
-  // NUEVO: advertir también si NODE_ENV no está definido y se usa fallback
-  if (!process.env.NODE_ENV && usingFallback) {
+  // Con secreto real, exigir longitud mínima siempre.
+  if (!usingFallback && String(secret).length < 32) {
+    throw new Error('[Nexus-Core] JWT_SECRET demasiado corto (mínimo 32 caracteres).');
+  }
+  if (isDev && usingFallback) {
     const { logger } = require('../config/logger');
-    logger.warn(
-      '[Nexus-Core] JWT_SECRET usa el valor por defecto inseguro y NODE_ENV no está definido. ' +
-      'Agrega JWT_SECRET y NODE_ENV=production al archivo .env antes de desplegar.'
-    );
+    logger.warn('[Nexus-Core] Usando JWT_SECRET de desarrollo (inseguro). Solo válido en NODE_ENV=development.');
+    return _DEV_FALLBACK;
   }
-
   return secret;
 }
 

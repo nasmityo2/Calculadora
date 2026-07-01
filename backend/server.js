@@ -45,12 +45,12 @@ app.disable('x-powered-by');
 // el servidor DEBE abortar inmediatamente. Esto evita firmar tokens con un secret
 // público en producción si alguien olvidó configurar el .env.
 (function assertSecretsForProduction() {
-  const isProduction = process.env.NODE_ENV === 'production';
-  if (!isProduction) return;
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) return;
 
   const DEV_FALLBACK = 'nexus-core-dev-jwt-secret-cambiar-en-produccion';
   const secret = process.env.JWT_SECRET;
-  const insecure = !secret || String(secret).trim() === '' || secret === DEV_FALLBACK;
+  const insecure = !secret || String(secret).trim() === '' || secret === DEV_FALLBACK || String(secret).trim().length < 32;
 
   if (insecure) {
     const msg =
@@ -134,6 +134,8 @@ const loginRateLimiter = rateLimit({
 
 app.use('/api/auth/login', loginRateLimiter);
 app.use('/api/setup/admin-inicial', loginRateLimiter);
+app.use('/api/setup/empresa-cashea-inicial', loginRateLimiter);
+app.use('/api/setup/modo-moneda-inicial', loginRateLimiter);
 // activar-inicial es sin JWT: rate-limit igual que login para evitar fuerza bruta de códigos
 app.use('/api/licencia/activar-inicial', loginRateLimiter);
 app.use('/api/auth', authRoutes);
