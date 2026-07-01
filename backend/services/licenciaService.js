@@ -43,6 +43,11 @@ MCowBQYDK2VwAyEALRroxTO1ghmGygJM0WMWY9zWk2XvQDdcZDBqbcb5qrM=
 -----END PUBLIC KEY-----`;
 
 function effectivePublicKeyPem() {
+  // Override por env SOLO en desarrollo; en producción (empaquetado) se ignora SIEMPRE.
+  try {
+    const electron = require('electron');
+    if (electron && electron.app && electron.app.isPackaged) return PUBLIC_KEY_PEM_DEFAULT;
+  } catch (_e) { /* node backend suelto → dev */ }
   const raw = process.env.NEXUS_LICENSE_PUBLIC_KEY;
   if (raw && String(raw).trim()) {
     return String(raw).trim().replace(/\\n/g, '\n');

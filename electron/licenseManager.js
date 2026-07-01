@@ -40,14 +40,24 @@ MCowBQYDK2VwAyEALRroxTO1ghmGygJM0WMWY9zWk2XvQDdcZDBqbcb5qrM=
 -----END PUBLIC KEY-----`;
 
 function publicKeyPem() {
+  // Override por env SOLO en desarrollo. En producción (empaquetado) se ignora
+  // SIEMPRE para impedir que se inyecte una clave pública propia (bypass total).
+  try {
+    const { app } = require('electron');
+    if (app && app.isPackaged) return PUBLIC_KEY_PEM_DEFAULT;
+  } catch (_e) { /* backend standalone / sin electron → dev */ }
   const raw = process.env.NEXUS_LICENSE_PUBLIC_KEY;
   if (raw && String(raw).trim()) return String(raw).trim().replace(/\\n/g, '\n');
   return PUBLIC_KEY_PEM_DEFAULT;
 }
 
 function serverUrl() {
-  return String(process.env.NEXUS_LICENSE_SERVER_URL || 'https://nexuscore-iota.vercel.app')
-    .replace(/\/+$/, '');
+  const DEFAULT_URL = 'https://nexuscore-iota.vercel.app';
+  try {
+    const { app } = require('electron');
+    if (app && app.isPackaged) return DEFAULT_URL;
+  } catch (_e) { /* dev */ }
+  return String(process.env.NEXUS_LICENSE_SERVER_URL || DEFAULT_URL).replace(/\/+$/, '');
 }
 
 // ── HWID endurecido ────────────────────────────────────────────────────────
