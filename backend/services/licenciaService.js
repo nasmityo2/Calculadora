@@ -343,6 +343,8 @@ async function obtenerEstadoLicencia(_db, hwid) {
       }
 
       const tiempoCheck = await verificarTiempoExterno();
+      const RELOJ_WM_CLAVE = 'licencia_reloj_max_visto';
+      const RELOJ_WM_TOL_MS = 10 * 60 * 1000;
       if (tiempoCheck.ok) {
         const LIMITE_MS = 10 * 60 * 1000;
         if (tiempoCheck.derivaMs > LIMITE_MS) {
@@ -354,10 +356,33 @@ async function obtenerEstadoLicencia(_db, hwid) {
           };
         }
       } else {
-        logger.warn(
-          '[licencia] No se pudo verificar tiempo externo — continuando con reloj local (trial)'
-        );
+        // AUD-SEC #3: sin tiempo externo, detectar retroceso del reloj con una marca de agua
+        // monotónica local (solo avanza). Falla en cerrado si el reloj va hacia atrás.
+        const wm = getOne(`SELECT valor FROM configuracion WHERE clave = ? LIMIT 1`, [RELOJ_WM_CLAVE]);
+        const maxVisto = wm && wm.valor ? Date.parse(wm.valor) : NaN;
+        if (Number.isFinite(maxVisto) && Date.now() < maxVisto - RELOJ_WM_TOL_MS) {
+          return {
+            ...base,
+            activada: false,
+            motivo:
+              'El reloj del sistema retrocedió respecto al último uso registrado. Corrige la fecha y hora del equipo o conéctate a internet para revalidar el período de prueba.',
+          };
+        }
       }
+      // AUD-SEC #3: avanzar la marca de agua monotónica (nunca retrocede).
+      try {
+        const wmPrev = getOne(`SELECT valor FROM configuracion WHERE clave = ? LIMIT 1`, [RELOJ_WM_CLAVE]);
+        const prevMs = wmPrev && wmPrev.valor ? Date.parse(wmPrev.valor) : NaN;
+        const nowMs = Date.now();
+        if (!Number.isFinite(prevMs) || nowMs > prevMs) {
+          run(
+            `INSERT INTO configuracion (clave, valor, categoria, descripcion)
+             VALUES (?, ?, 'sistema', 'Marca de agua monotónica anti-retroceso de reloj (trial)')
+             ON CONFLICT (clave) DO UPDATE SET valor = excluded.valor`,
+            [RELOJ_WM_CLAVE, new Date(nowMs).toISOString()]
+          );
+        }
+      } catch (_e) { /* best-effort */ }
     }
 
     const expiraDate =

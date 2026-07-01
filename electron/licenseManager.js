@@ -700,7 +700,9 @@ function evaluate(app) {
   saveHwidCache(app, tokenHwid, tokenHwid === hwid ? [] : [hwid]);
 
   // Período de gracia offline: si pasó demasiado tiempo sin verificar online, exigir reconexión.
-  const grace = Number(local.gracePeriodDays) || DEFAULT_GRACE_DAYS;
+  const esTrialLocal = local.type === 'trial';
+  const graceCap = esTrialLocal ? 2 : DEFAULT_GRACE_DAYS;
+  const grace = Math.min(Number(local.gracePeriodDays) || DEFAULT_GRACE_DAYS, graceCap);
   const last = Date.parse(local.lastVerifiedAt || local.activatedAt || '');
   const sinceMs = Number.isFinite(last) ? Date.now() - last : Infinity;
 
