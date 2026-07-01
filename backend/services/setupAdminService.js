@@ -240,6 +240,14 @@ async function guardarEmpresaInicial(_db, payload) {
     throw err;
   }
 
+      // AUD-SEC: tras finalizar el asistente, los datos de empresa se editan con JWT desde
+      // Configuración. Este endpoint público solo es válido durante la instalación inicial.
+      if (await isSetupEmpresaCompletado()) {
+        const err = new Error('El asistente de instalación ya se completó. Cambia los datos de empresa desde Configuración.');
+        err.status = 409;
+        throw err;
+      }
+
   const camposEmpresa = {};
   camposEmpresa.empresa_nombre = nombre;
   if (p.empresa_rif != null && String(p.empresa_rif).trim()) {
