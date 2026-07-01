@@ -63,7 +63,12 @@
   }
   function fBs(v)  { return n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   /** Monto en referencia $ BCV — formato principal del sistema. */
-  function fBcv(v) { return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV'; }
+  function fBcv(v) {
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
+  }
 
   /** Ref. $ BCV de una fila de ventas (prioriza total_bcv persistido; no confundir con total_usd cobrado). */
   function refBcvDeFila(row) {
@@ -85,13 +90,17 @@
   function htmlMontoBcvUsd(valBcv, valUsd, cls) {
     var bcv = n(valBcv);
     var usd = n(valUsd);
+    var extraCls = cls ? ' ' + cls : '';
     function fmtSigned(prefix, absFmt, absVal, suffix) {
-      if (!Number.isFinite(absVal) || absVal === 0) return prefix + ' ' + absFmt(0) + suffix;
-      return (absVal < 0 ? '-' : '') + prefix + ' ' + absFmt(Math.abs(absVal)) + suffix;
+      if (!Number.isFinite(absVal) || absVal === 0) return prefix + absFmt(0) + suffix;
+      return (absVal < 0 ? '-' : '') + prefix + absFmt(Math.abs(absVal)) + suffix;
+    }
+    var solo = window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv();
+    if (solo) {
+      return '<div class="rpt-monto-principal' + extraCls + '">' + fmtSigned('$', fRefBcv, bcv, ' USD') + '</div>';
     }
     var bcvTxt = fmtSigned('$', fRefBcv, bcv, ' BCV');
     var usdTxt = fmtSigned('$', fUsd, usd, ' USD');
-    var extraCls = cls ? ' ' + cls : '';
     return (
       '<div class="rpt-monto-principal' + extraCls + '">' + bcvTxt + '</div>' +
       '<div class="rpt-monto-sub">' + usdTxt + '</div>'
@@ -101,13 +110,18 @@
   function htmlCeldaBcvUsd(valBcv, valUsd, cls) {
     var bcv = n(valBcv);
     var usd = n(valUsd);
+    var extraCls = cls ? ' ' + cls : '';
     function fmtSigned(prefix, absFmt, absVal, suffix) {
-      if (!Number.isFinite(absVal) || absVal === 0) return prefix + ' ' + absFmt(0) + suffix;
-      return (absVal < 0 ? '-' : '') + prefix + ' ' + absFmt(Math.abs(absVal)) + suffix;
+      if (!Number.isFinite(absVal) || absVal === 0) return prefix + absFmt(0) + suffix;
+      return (absVal < 0 ? '-' : '') + prefix + absFmt(Math.abs(absVal)) + suffix;
+    }
+    var solo = window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv();
+    if (solo) {
+      var soloTxt = bcv !== 0 ? fmtSigned('$', fRefBcv, bcv, ' USD') : '—';
+      return '<td class="num"><div class="rpt-celda-inner' + extraCls + '">' + soloTxt + '</div></td>';
     }
     var bcvTxt = bcv !== 0 ? fmtSigned('$', fRefBcv, bcv, ' BCV') : '—';
     var usdTxt = fmtSigned('$', fUsd, usd, ' USD');
-    var extraCls = cls ? ' ' + cls : '';
     return (
       '<td class="num">' +
       '<div class="rpt-celda-inner' + extraCls + '">' + bcvTxt + '</div>' +
@@ -118,14 +132,21 @@
 
   /** Depósito Cashea: ref. $ BCV, Bs acreditados (tasa del día) y USD calle secundario. */
   function htmlMontoDepositoCashea(valBcv, valBs, valUsd, cls) {
+    var extraCls = cls ? ' ' + cls : '';
     function fmtSigned(prefix, absFmt, absVal, suffix) {
-      if (!Number.isFinite(absVal) || absVal === 0) return prefix + ' ' + absFmt(0) + suffix;
-      return (absVal < 0 ? '-' : '') + prefix + ' ' + absFmt(Math.abs(absVal)) + suffix;
+      if (!Number.isFinite(absVal) || absVal === 0) return prefix + absFmt(0) + suffix;
+      return (absVal < 0 ? '-' : '') + prefix + absFmt(Math.abs(absVal)) + suffix;
+    }
+    var solo = window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv();
+    var bsTxt = 'Bs. ' + fBs(valBs);
+    if (solo) {
+      return (
+        '<div class="rpt-monto-principal' + extraCls + '">' + fmtSigned('$', fRefBcv, n(valBcv), ' USD') + '</div>' +
+        '<div class="rpt-monto-bs">' + bsTxt + '</div>'
+      );
     }
     var bcvTxt = fmtSigned('$', fRefBcv, n(valBcv), ' BCV');
-    var bsTxt = 'Bs. ' + fBs(valBs);
     var usdTxt = fmtSigned('$', fUsd, n(valUsd), ' USD');
-    var extraCls = cls ? ' ' + cls : '';
     return (
       '<div class="rpt-monto-principal' + extraCls + '">' + bcvTxt + '</div>' +
       '<div class="rpt-monto-bs">' + bsTxt + '</div>' +
@@ -134,16 +155,25 @@
   }
 
   function htmlCeldaDepositoCashea(valBcv, valBs, valUsd, cls) {
+    var extraCls = cls ? ' ' + cls : '';
     function fmtSigned(prefix, absFmt, absVal, suffix) {
-      if (!Number.isFinite(absVal) || absVal === 0) return prefix + ' ' + absFmt(0) + suffix;
-      return (absVal < 0 ? '-' : '') + prefix + ' ' + absFmt(Math.abs(absVal)) + suffix;
+      if (!Number.isFinite(absVal) || absVal === 0) return prefix + absFmt(0) + suffix;
+      return (absVal < 0 ? '-' : '') + prefix + absFmt(Math.abs(absVal)) + suffix;
     }
     var bcv = n(valBcv);
     var bs = n(valBs);
-    var bcvTxt = bcv !== 0 ? fmtSigned('$', fRefBcv, bcv, ' BCV') : '—';
+    var solo = window.NexusComponents && window.NexusComponents.esSoloBcv && window.NexusComponents.esSoloBcv();
+    var bcvTxt = bcv !== 0 ? fmtSigned('$', fRefBcv, bcv, solo ? ' USD' : ' BCV') : '—';
     var bsTxt = bs !== 0 ? 'Bs. ' + fBs(bs) : '—';
+    if (solo) {
+      return (
+        '<td class="num">' +
+        '<div class="rpt-celda-inner' + extraCls + '">' + bcvTxt + '</div>' +
+        '<div class="rpt-celda-bs">' + bsTxt + '</div>' +
+        '</td>'
+      );
+    }
     var usdTxt = fmtSigned('$', fUsd, n(valUsd), ' USD');
-    var extraCls = cls ? ' ' + cls : '';
     return (
       '<td class="num">' +
       '<div class="rpt-celda-inner' + extraCls + '">' + bcvTxt + '</div>' +
