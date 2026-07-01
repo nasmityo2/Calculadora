@@ -18,11 +18,21 @@ function hwidsFromBody(body) {
   return list;
 }
 
+// AUD-SEC: estado y activación inicial son operaciones LOCALES (las usa el cliente Electron
+// en 127.0.0.1). En modo red no deben ser accesibles desde la LAN. La renovación desde la
+// UI admin usa POST /activar (con JWT + permiso).
+function soloLocal(req, res, next) {
+  const raw = (req.socket && req.socket.remoteAddress) || req.ip || '';
+  const ip = String(raw).replace(/^::ffff:/, '');
+  if (ip === '127.0.0.1' || ip === '::1') return next();
+  return res.status(403).json({ error: 'Disponible solo en el equipo local.' });
+}
+
 /**
  * GET /api/licencia/estado
  * Devuelve el estado de la licencia almacenada (verificación local, sin internet).
  */
-router.get('/estado', asyncHandler(async (req, res) => {
+router.get('/estado', soloLocal, asyncHandler(async (req, res) => {
   const q = req.query.hwid || req.headers['x-hardware-id'];
   const compat = req.query.hwid_compat;
   const list = [];
@@ -61,7 +71,7 @@ router.post('/activar', requireAuth, requirePermission('usuarios_all'), asyncHan
  * Si la clave guardada está expirada o inválida, se permite sustituirla (misma pantalla
  * de activación tras trial vencido — el cliente final no usa SQL ni Configuración).
  */
-router.post('/activar-inicial', asyncHandler(async (req, res) => {
+router.post('/activar-inicial', soloLocal, asyncHandler(async (req, res) => {
   const { clave } = req.body || {};
   const hwids = hwidsFromBody(req.body);
   if (!clave || !String(clave).trim()) throw httpError(400, 'La clave de licencia es obligatoria');

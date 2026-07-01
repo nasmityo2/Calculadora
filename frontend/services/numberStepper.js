@@ -7,17 +7,14 @@
 window.NexusNumberStepper = (function () {
   /** Misma lógica que parseMontoUsuario en POS (es-VE: 62.838,38). */
   function parseMontoVe(raw) {
-    var t = String(raw == null ? '' : raw).trim().replace(/\s/g, '');
-    if (!t) return NaN;
-    if (t.indexOf(',') >= 0) {
-      t = t.replace(/\./g, '').replace(',', '.');
-    } else {
-      t = t.replace(',', '.');
-      if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
-        t = t.replace(/\./g, '');
-      }
-    }
-    return parseFloat(t);
+    var s = String(raw == null ? '' : raw).trim().replace(/\s/g, '');
+    if (!s) return NaN;
+    // es-VE: 1.234.567,89 | 1234,56 | 1234   ·   técnico: 1234.56
+    var ve = /^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+(,\d{1,2})?$/;
+    var tech = /^\d+(\.\d{1,2})?$/;
+    if (ve.test(s)) return Number(s.replace(/\./g, '').replace(',', '.'));
+    if (tech.test(s)) return Number(s);
+    return NaN; // rechaza cualquier prefijo/sufijo no numérico
   }
 
   function formatMontoVe(n) {

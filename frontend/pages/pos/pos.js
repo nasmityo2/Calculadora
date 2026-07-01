@@ -134,17 +134,16 @@
    * Sin coma y solo grupos ····.···… se tratan los puntos como miles.
    */
   function parseMontoUsuario(s) {
+    if (window.NexusNumberStepper && typeof window.NexusNumberStepper.parseMontoVe === 'function') {
+      return window.NexusNumberStepper.parseMontoVe(s);
+    }
     var t = String(s == null ? '' : s).trim().replace(/\s/g, '');
     if (!t) return NaN;
-    if (t.indexOf(',') >= 0) {
-      t = t.replace(/\./g, '').replace(',', '.');
-    } else {
-      t = t.replace(',', '.');
-      if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
-        t = t.replace(/\./g, '');
-      }
-    }
-    return parseFloat(t);
+    var ve = /^\d{1,3}(\.\d{3})*(,\d{1,2})?$|^\d+(,\d{1,2})?$/;
+    var tech = /^\d+(\.\d{1,2})?$/;
+    if (ve.test(t)) return Number(t.replace(/\./g, '').replace(',', '.'));
+    if (tech.test(t)) return Number(t);
+    return NaN;
   }
 
   /** Resumen de totales en modal de cobro (solo cadena BCV). */
