@@ -121,10 +121,13 @@ window.CuentasPagarPage = (function () {
   function round4(v) { return Math.round(n(v) * 10000) / 10000; }
 
   function fBcv(v) {
-    return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
   }
   function fUsd(v) {
-    return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
   }
   function fBs(v) {
     return 'Bs. ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

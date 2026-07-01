@@ -263,8 +263,8 @@
     var mu = String(mon || '')
       .toUpperCase()
       .replace(/\s+/g, '');
-    if (mu === 'USD' || mu === '$') return '$ ' + formatUsd(monto);
-    if (mu === 'USD_BCV') return '$ ' + formatUsd(monto) + ' BCV';
+    if (mu === 'USD' || mu === '$') return '$' + formatUsd(monto);
+    if (mu === 'USD_BCV') return montoRefTxt(monto);
     return formatBs(monto) + ' Bs';
   }
 
@@ -286,7 +286,7 @@
       function setResumen(count, totalBs, totalRefBcv) {
         if (resumenCountEl) resumenCountEl.textContent = String(count);
         if (resumenBsEl) resumenBsEl.textContent = 'Bs ' + formatBs(totalBs);
-        if (resumenUsdEl) resumenUsdEl.textContent = '$ ' + formatRefUsdBcv(totalRefBcv);
+        if (resumenUsdEl) resumenUsdEl.textContent = montoRefTxt(totalRefBcv);
       }
 
       var modalOverlay = host.querySelector('#ventas-anular-modal');

@@ -32,7 +32,12 @@
     }
     return v;
   }
-  function fUsd(v) { return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV'; }
+  function fUsd(v) {
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
+  }
   function fFecha(v) { return v ? new Date(v).toLocaleDateString('es-VE') : '—'; }
 
   /** YYYY-MM-DD para rangos de liquidación (API Cashea). */

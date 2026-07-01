@@ -35,7 +35,12 @@
     return parseFloat(t);
   }
   function fUsd(v) { return n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function fBcv(v) { return '$ ' + fUsd(v) + ' BCV'; }
+  function fBcv(v) {
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + fUsd(v) + ' BCV';
+  }
   function fBs(v) { return 'Bs. ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function roundRefBcv2(v) { return Math.round(n(v) * 100) / 100; }
   function round4(v) { return Math.round(n(v) * 10000) / 10000; }
