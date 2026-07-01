@@ -63,7 +63,6 @@
       "backend/**/*",
       "resources/**/*",
       "package.json",
-      "!database/postgres/**",
       "!**/*.log",
       "!dist/**",
       "!node_modules/.cache/**",
