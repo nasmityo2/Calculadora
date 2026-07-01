@@ -54,6 +54,13 @@
     });
   }
 
+  function montoRefTxt(v) {
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + formatRefUsdBcv(v) + ' BCV';
+  }
+
   function round4(n) {
     return Math.round(Number(n) * 10000) / 10000;
   }
@@ -131,18 +138,16 @@
     var refN = refBcvNumLista(v);
 
     if (k === 'efectivo_usd' || k === 'zelle') {
-      return '$ ' + formatUsd(usd) + ' USD';
+      return '$' + formatUsd(usd) + ' USD';
     }
     if (k === 'mixto') {
       if (Number.isFinite(refN) && refN > 0) {
-        return (
-          '$ ' + formatRefUsdBcv(refN) + ' BCV · $ ' + formatUsd(usd) + ' USD'
-        );
+        return montoRefTxt(refN) + ' · $' + formatUsd(usd) + ' USD';
       }
-      return '$ ' + formatUsd(usd) + ' USD';
+      return '$' + formatUsd(usd) + ' USD';
     }
     if (Number.isFinite(refN) && refN > 0) {
-      return '$ ' + formatRefUsdBcv(refN) + ' BCV';
+      return montoRefTxt(refN);
     }
     if (
       k === 'efectivo_bs' ||
@@ -155,7 +160,7 @@
       return '—';
     }
     if (usd > 0) {
-      return '$ ' + formatUsd(usd) + ' USD';
+      return '$' + formatUsd(usd) + ' USD';
     }
     return '—';
   }

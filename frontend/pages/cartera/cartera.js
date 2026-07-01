@@ -37,12 +37,18 @@
     return parseFloat(t);
   }
   function fBcv(v) {
-    return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
+    if (window.NexusComponents && typeof window.NexusComponents.formatMontoRef === 'function') {
+      return window.NexusComponents.formatMontoRef(v);
+    }
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' BCV';
   }
   function fUsd(v) {
-    return '$ ' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
+    return '$' + n(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' USD';
   }
   function celdaMonto(bcv, usd) {
+    if (carteraModoMoneda() === 'solo_bcv') {
+      return '<div style="font-weight:700">' + fBcv(bcv) + '</div>';
+    }
     return '<div style="font-weight:700">' + fBcv(bcv) + '</div>' +
       '<div style="font-size:.72rem;color:var(--text-secondary)">' + fUsd(usd) + '</div>';
   }

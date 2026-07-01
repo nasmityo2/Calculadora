@@ -14,6 +14,29 @@ function formatRefUsdBcv(value) {
   });
 }
 
+/** Modo monetario operativo ('multimoneda' | 'solo_bcv'). Default multimoneda. */
+function _modoMonedaMoneda() {
+  if (window.NexusComponents && typeof window.NexusComponents.getModoMoneda === 'function') {
+    return window.NexusComponents.getModoMoneda();
+  }
+  try {
+    return localStorage.getItem('nexus_modo_moneda') === 'solo_bcv' ? 'solo_bcv' : 'multimoneda';
+  } catch (e) { return 'multimoneda'; }
+}
+/** true cuando el modo operativo es Solo BCV. */
+function esSoloBcv() { return _modoMonedaMoneda() === 'solo_bcv'; }
+/** Monto de referencia: "$0,00 BCV" (multimoneda) o "$0,00 USD" (solo BCV). Sin espacio tras "$". */
+function formatMontoRef(value) {
+  return '$' + formatRefUsdBcv(value) + (esSoloBcv() ? ' USD' : ' BCV');
+}
+/** Monto en USD de mercado (siempre): "$0,00 USD". Sin espacio tras "$". */
+function formatMontoUsd(value) {
+  return '$' + formatRefUsdBcv(value) + ' USD';
+}
+
 window.NexusComponents = window.NexusComponents || {};
 window.NexusComponents.currencyDisplay = currencyDisplay;
 window.NexusComponents.formatRefUsdBcv = formatRefUsdBcv;
+window.NexusComponents.esSoloBcv = esSoloBcv;
+window.NexusComponents.formatMontoRef = formatMontoRef;
+window.NexusComponents.formatMontoUsd = formatMontoUsd;

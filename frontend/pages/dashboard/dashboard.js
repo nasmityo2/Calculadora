@@ -41,10 +41,7 @@
     return modoMoneda() === 'solo_bcv' ? 'USD' : 'BCV';
   }
   function bcv(v) {
-    var num = formatRefUsdBcvVe(v);
-    return modoMoneda() === 'solo_bcv'
-      ? '$' + num + ' USD'
-      : '$ ' + num + ' BCV';
+    return '$' + formatRefUsdBcvVe(v) + ' ' + sufijoMoneda();
   }
 
   /** Monto en bolívares (ref. $ BCV × tasa BCV del día). */
@@ -387,7 +384,7 @@
             ticks: {
               color: theme.muted,
               callback: function (v) {
-                return '$ ' + formatRefUsdBcvVe(v);
+                return '$' + formatRefUsdBcvVe(v);
               },
               font: { family: 'DM Mono', size: 10 }
             },
@@ -470,7 +467,7 @@
           y: {
             ticks: {
               color: theme.muted,
-              callback: function (v) { return '$ ' + formatRefUsdBcvVe(v); },
+              callback: function (v) { return '$' + formatRefUsdBcvVe(v); },
               font: { family: 'DM Mono', size: 10 }
             },
             grid: { color: theme.grid }
