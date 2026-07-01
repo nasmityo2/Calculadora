@@ -1361,13 +1361,6 @@
         var el = document.getElementById('respaldo-status');
         if (!el) return;
         var bannerPg = '';
-        if (data.lastErrorCode === 'pg_dump_version_mismatch') {
-          bannerPg =
-            '<div class="cfg-pg-warn">' +
-            'Versión de <code>pg_dump</code> incompatible con PostgreSQL. ' +
-            'Reinicie la app (Nexus busca en <code>Program Files\\PostgreSQL</code>) o defina <code>NEXUS_PG_BIN_DIR</code> en <code>.env</code> con la carpeta <code>bin</code> de la misma versión mayor.' +
-            '</div>';
-        }
         var estado = '';
         if (data.lastSuccessAt) {
           estado =
