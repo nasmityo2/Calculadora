@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', function () {
   // Bandera para no destruir y recrear el chrome en cada cambio de ruta
   var chromeYaMontado = false;
 
+  // El titlebar es chrome de la ventana: se monta una sola vez y persiste
+  // entre rutas y sesiones. Re-renderizarlo duplicaba listeners IPC
+  // (window:state / window:resized) → MaxListenersExceededWarning.
+  var titlebarYaMontado = false;
+
   function hasSession() {
     return !!(
       window.NexusAuth &&
@@ -29,10 +34,16 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function mountChrome() {
-    // Titlebar: siempre visible (chrome de la ventana, no de la app)
-    if (titlebarHost && window.NexusComponents && window.NexusComponents.renderTitlebar) {
-      titlebarHost.innerHTML = '';
+    // Titlebar: se monta UNA sola vez (chrome de la ventana, no de la app).
+    // No se destruye/recrea en cada ruta para evitar acumular listeners IPC.
+    if (
+      titlebarHost &&
+      !titlebarYaMontado &&
+      window.NexusComponents &&
+      window.NexusComponents.renderTitlebar
+    ) {
       window.NexusComponents.renderTitlebar(titlebarHost);
+      titlebarYaMontado = true;
     }
 
     if (!hasSession()) {
