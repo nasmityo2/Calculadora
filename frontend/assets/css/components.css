@@ -203,66 +203,13 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
   outline: none;
 }
 
-/* ── ZONA CENTRO: buscador global ────────────────────────── */
-.app-search {
-  flex: 1 1 auto;
-  max-width: 520px;
-  margin: 0 auto;
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.app-search-icon {
-  position: absolute;
-  left: 12px;
-  width: 16px;
-  height: 16px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.app-search-input {
-  width: 100%;
-  height: 38px;
-  padding: 0 68px 0 36px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.app-search-input::placeholder {
-  color: var(--text-muted);
-}
-
-.app-search-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px var(--accent-primary-bg);
-}
-
-.app-search-kbd {
-  position: absolute;
-  right: 10px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
-  background: var(--bg-secondary);
-}
-
 /* ── ZONA DERECHA: acciones ──────────────────────────────── */
 .header-actions {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* Reloj y fecha */
@@ -1217,10 +1164,6 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
 
 /* ── Header compacto ── */
 @media (max-width: 1100px) {
-  .app-search {
-    max-width: none;
-  }
-
   .app-header-label {
     display: none;
   }

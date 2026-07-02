@@ -200,7 +200,7 @@
 
   <p class="footer-note">
     La licencia se cifra y vincula a este equipo; funciona sin internet dentro del período de gracia.<br>
-    ¿Problemas? Contacta a tu proveedor con el ID de este equipo.
+    ¿Problemas o tu prueba venció? Contáctame: WhatsApp +58 412-0000000 / ventas@midominio.com
   </p>
 </div>
 
@@ -242,7 +242,9 @@
     foreign:        'La licencia guardada pertenece a otro equipo. Ingresa la clave de este equipo.',
     tampered:       'El archivo de licencia no es válido o fue modificado. Vuelve a activar.',
     hwid_drifted:   'Windows cambió el ID de este equipo. Conéctate e ingresa la misma clave para revalidar.',
-    grace_exceeded: 'Pasó demasiado tiempo sin verificar la licencia. Conéctate e ingresa tu clave para revalidar.'
+    grace_exceeded: 'Pasó demasiado tiempo sin verificar la licencia. Conéctate e ingresa tu clave para revalidar.',
+    trial_expired:  'Tu prueba gratuita de 7 días finalizó. Escríbeme para adquirir tu licencia: WhatsApp +58 412-0000000 / ventas@midominio.com',
+    none:           'Ingresa tu clave de licencia para activar.'
   };
 
   function init() {
@@ -266,6 +268,12 @@
         if (['foreign', 'tampered', 'expired', 'grace_exceeded'].indexOf(st.state) >= 0 && st.info) {
           btnLiberar.style.display = 'block';
         }
+      }
+      var esTrialVencida = st.state === 'trial_expired' ||
+        (st.state === 'expired' && st.info && st.info.isTrial);
+      if (esTrialVencida) {
+        alertCtxMsg.textContent = 'Tu prueba gratuita de 7 días finalizó. Escríbeme para adquirir tu licencia: WhatsApp +58 412-0000000 / ventas@midominio.com';
+        alertCtx.classList.add('show');
       }
     }).catch(function () {
       hwidEl.textContent = 'HWID-ERROR';

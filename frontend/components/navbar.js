@@ -184,48 +184,6 @@
     usdPill.appendChild(usdInp);
     ticker.appendChild(usdPill);
 
-    /* ── CENTRO: Buscador global ───────────────────────────── */
-    const searchWrap = document.createElement('div');
-    searchWrap.className = 'app-search';
-
-    // Lupa SVG inline
-    const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    searchIcon.setAttribute('class', 'app-search-icon');
-    searchIcon.setAttribute('viewBox', '0 0 24 24');
-    searchIcon.setAttribute('stroke', 'currentColor');
-    searchIcon.setAttribute('fill', 'none');
-    searchIcon.setAttribute('stroke-width', '2');
-    const searchPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    searchPath.setAttribute('d', 'M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z');
-    searchIcon.appendChild(searchPath);
-
-    const searchInput = document.createElement('input');
-    searchInput.id = 'navbar-global-search';
-    searchInput.className = 'app-search-input';
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Buscar productos, clientes, facturas…';
-    searchInput.setAttribute('aria-label', 'Búsqueda global');
-
-    const searchKbd = document.createElement('kbd');
-    searchKbd.className = 'app-search-kbd';
-    searchKbd.textContent = 'Ctrl K';
-
-    // TODO: enganchar navegación de búsqueda global
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const q = searchInput.value.trim();
-        if (q) {
-          window.dispatchEvent(
-            new CustomEvent('nexus:global-search', { detail: { q } })
-          );
-        }
-      }
-    });
-
-    searchWrap.appendChild(searchIcon);
-    searchWrap.appendChild(searchInput);
-    searchWrap.appendChild(searchKbd);
-
     /* ── DERECHA: Acciones ─────────────────────────────────── */
     const actions = document.createElement('div');
     actions.className = 'header-actions';
@@ -399,7 +357,6 @@
 
     /* ── ENSAMBLAR HEADER ──────────────────────────────────── */
     header.appendChild(ticker);
-    header.appendChild(searchWrap);
     header.appendChild(actions);
 
     container.appendChild(header);

@@ -116,8 +116,13 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
     var umbral = UMBRAL_DEFAULT;
 
     if (info.isTrial) {
-      var dTxt = dias != null ? '<strong>' + dias + '</strong> día(s) restantes' : 'vigente';
-      renderBanner('Versión de prueba · ' + dTxt, stateClass(dias));
+      // Mostrar el aviso SOLO el último día (cuando queda 1 día o menos para vencer).
+      if (dias != null && dias <= 1) {
+        var txt = dias >= 1
+          ? 'Versión de prueba · <strong>1</strong> día restante'
+          : 'Versión de prueba · <strong>vence hoy</strong>';
+        renderBanner(txt, 'is-critical');
+      }
       return;
     }
     if (dias != null && dias <= umbral) {
