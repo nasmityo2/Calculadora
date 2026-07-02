@@ -493,6 +493,26 @@ function fromB64url(s) {
   return Buffer.from(b64 + '='.repeat(pad), 'base64');
 }
 
+let _nativeVerifier = null;
+let _nativeVerifierTried = false;
+
+function getNativeVerifier() {
+  if (_nativeVerifierTried) return _nativeVerifier;
+  _nativeVerifierTried = true;
+  try {
+    const nv = require('nexus-verify');
+    if (nv && typeof nv.verifyDetached === 'function'
+      && typeof nv.selfTest === 'function' && nv.selfTest() === 424242) {
+      _nativeVerifier = nv;
+    } else {
+      _nativeVerifier = null;
+    }
+  } catch (_e) {
+    _nativeVerifier = null;
+  }
+  return _nativeVerifier;
+}
+
 /** NEXUS-DUAL: contraparte en backend/services/licenciaService.js */
 function parseTokenExpiry(ex) {
   if (ex == null || ex === '') return null;
@@ -516,10 +536,25 @@ function verifyTokenOffline(token, hwid) {
     if (parts.length !== 3) return { ok: false, motivo: 'Token de licencia corrupto' };
     const payloadBuf = fromB64url(parts[1]);
     const sigBytes = fromB64url(parts[2]);
-    const pubKey = crypto.createPublicKey(publicKeyPem());
-    const ok = crypto.verify(null, payloadBuf, pubKey, sigBytes)
-      || crypto.verify(null, Buffer.from(parts[1], 'utf8'), pubKey, sigBytes);
+
+    const nv = getNativeVerifier();
+    let ok;
+    if (nv) {
+      // Camino primario: verificación nativa (clave pública Ed25519 embebida en C).
+      ok = nv.verifyDetached(payloadBuf, sigBytes)
+        || nv.verifyDetached(Buffer.from(parts[1], 'utf8'), sigBytes);
+    } else {
+      // PUNTO INTERMEDIO (robustez > hermetismo): si el addon nativo no carga en el equipo
+      // del cliente (p. ej. bloqueado por antivirus), NO dejamos la app inservible: usamos la
+      // verificación por clave pública en JS como respaldo. Un token legítimo (firmado por tu
+      // clave privada) se sigue aceptando; así ningún cliente que pagó queda bloqueado.
+      try { console.warn('[licencia] verificador nativo no disponible; respaldo JS activo.'); } catch (_e) {}
+      const pubKey = crypto.createPublicKey(publicKeyPem());
+      ok = crypto.verify(null, payloadBuf, pubKey, sigBytes)
+        || crypto.verify(null, Buffer.from(parts[1], 'utf8'), pubKey, sigBytes);
+    }
     if (!ok) return { ok: false, motivo: 'Firma de licencia no válida' };
+
     const payload = JSON.parse(payloadBuf.toString('utf8'));
     if (payload.h !== sha256hex(String(hwid || '').trim().toUpperCase())) {
       return { ok: false, motivo: 'Esta licencia pertenece a otro equipo' };
