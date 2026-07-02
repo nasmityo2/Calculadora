@@ -134,25 +134,26 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
 }
 
 /* ─── App Header ──────────────────────────────────────────────────────── */
+/* Rediseño premium: ticker (izq) · buscador (centro) · acciones (der)   */
+/* Tokens 100% desde variables.css — sin valores hardcodeados             */
 .app-header {
-  height: var(--header-height);
-  min-height: var(--header-height);
-  padding: 0 1.25rem;
+  height: auto;
+  min-height: 56px;
+  padding: 0 var(--space-5);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: var(--space-5);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   box-shadow: 0 1px 0 var(--border-subtle), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.app-header-block {
+/* ── ZONA IZQUIERDA: ticker de tasas ─────────────────────── */
+.app-header-ticker {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: var(--space-3);
+  flex-shrink: 0;
 }
 
 .app-header-label {
@@ -161,39 +162,18 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.tasa-group {
-  display: flex;
+/* Cada pill de tasa (BCV / USD) */
+.tasa-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-}
-
-.tasa-input-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* DISPLAY TASA BCV — el elemento más único de Nexus Core (instrumento financiero) */
-.tasa-input {
-  width: 6.5rem;
-  padding: 4px 10px;
+  gap: var(--space-2);
+  padding: 4px 8px;
   border: 1px solid var(--border-accent);
   border-radius: var(--radius-sm);
-  background: var(--accent-primary-glow);
-  color: var(--accent-primary);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-align: right;
-}
-
-.tasa-input:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: var(--shadow-accent);
+  background: var(--accent-primary-bg);
 }
 
 .tasa-badge {
@@ -205,84 +185,205 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
   color: var(--text-secondary);
 }
 
-.header-meta {
+/* DISPLAY TASA BCV — instrumento financiero */
+.tasa-input {
+  width: 5.5rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+
+.tasa-input:focus {
+  outline: none;
+}
+
+/* ── ZONA CENTRO: buscador global ────────────────────────── */
+.app-search {
+  flex: 1 1 auto;
+  max-width: 520px;
+  margin: 0 auto;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+}
+
+.app-search-icon {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.app-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 68px 0 36px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.app-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.app-search-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-bg);
+}
+
+.app-search-kbd {
+  position: absolute;
+  right: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+}
+
+/* ── ZONA DERECHA: acciones ──────────────────────────────── */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Reloj y fecha */
+.header-clock-box {
+  text-align: right;
+  line-height: 1.15;
 }
 
 .header-clock {
   font-family: var(--font-mono);
+  font-size: 13px;
   color: var(--text-primary);
 }
 
-.header-user-block {
+.header-date {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+/* Estado de BD como pill */
+.db-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.db-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-success);
+}
+
+.db-status-dot.is-offline {
+  background: var(--accent-danger);
+}
+
+.db-status-dot.is-pending {
+  background: var(--text-muted);
+}
+
+/* Chip de usuario (avatar + nombre/rol) */
+.user-chip {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: var(--space-2);
+  padding: 3px 8px 3px 3px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-primary-bg);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
 }
 
 .header-user {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.25;
+  align-items: flex-start;
+  line-height: 1.2;
 }
 
-.btn-logout-header {
-  flex-shrink: 0;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.72rem;
+.header-user-name {
+  color: var(--text-primary);
+  font-size: 12px;
   font-weight: 500;
-  border-radius: var(--radius-sm);
+}
+
+.header-user-role {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Botón icono genérico */
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   cursor: pointer;
-  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.icon-btn:hover {
+  background: var(--bg-accent);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
 }
 
 .btn-logout-header:hover {
   color: var(--accent-danger);
   border-color: rgba(239, 68, 68, 0.45);
   background: rgba(239, 68, 68, 0.06);
-}
-
-.header-user-name {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.header-user-role {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-.db-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.8rem;
-}
-
-.db-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-success);
-  box-shadow: var(--shadow-success);
-}
-
-.db-status-dot.is-offline {
-  background: var(--accent-danger);
-  box-shadow: var(--shadow-danger);
-}
-
-.db-status-dot.is-pending {
-  background: var(--text-muted);
-  box-shadow: none;
 }
 
 /* ─── Botones ─────────────────────────────────────────────────────────── */
@@ -1115,65 +1216,27 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
 }
 
 /* ── Header compacto ── */
-@media (max-width: 1280px) {
-  .app-header {
-    gap: 0.5rem;
-    padding: 0 1rem;
+@media (max-width: 1100px) {
+  .app-search {
+    max-width: none;
   }
 
   .app-header-label {
     display: none;
   }
-
-  .tasa-input {
-    width: 5.5rem;
-  }
-}
-
-@media (max-width: 1100px) {
-  .app-header {
-    padding: 0 0.75rem;
-    gap: 0.35rem;
-  }
-
-  .header-clock {
-    display: none;
-  }
-
-  .header-user {
-    align-items: center;
-  }
-
-  .header-meta {
-    gap: 0.5rem;
-  }
-
-  .tasa-input {
-    width: 5rem;
-    font-size: 0.8rem;
-  }
 }
 
 @media (max-width: 860px) {
-  .app-header-block:first-child {
-    display: none;
-  }
-
-  .header-user-name {
+  .header-date {
     display: none;
   }
 
   .header-user-role {
-    font-size: 0.7rem;
+    display: none;
   }
 
-  .btn-logout-header {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.68rem;
-  }
-
-  .db-status {
-    font-size: 0.75rem;
+  .user-chip {
+    padding: 3px;
   }
 }
 
@@ -1197,4 +1260,149 @@ body.nexus-solo-bcv .nexus-multimoneda-only { display: none !important; }
     padding: 0.55rem 0.65rem;
     font-size: 0.82rem;
   }
+}
+
+/* ─── License Banner ───────────────────────────────────────────
+   Franja fina informativa de estado de licencia (trial / crítica).
+   Se auto-inserta al inicio de .layout-main vía expiraLicenciaUi.js.
+   Clases de estado: .is-trial (ámbar suave) / .is-critical (rojo suave). */
+.lic-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--accent-primary-bg);
+  color: var(--text-secondary);
+}
+.lic-banner.is-trial {
+  background: var(--badge-yellow-bg);
+  color: var(--badge-yellow-text);
+  border-bottom-color: var(--badge-yellow-border);
+}
+.lic-banner.is-critical {
+  background: var(--badge-red-bg);
+  color: var(--badge-red-text);
+  border-bottom-color: var(--badge-red-border);
+}
+.lic-banner-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.lic-banner-text strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+.lic-banner-cta {
+  margin-left: auto;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  transition: background var(--transition-fast);
+}
+.lic-banner-cta:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Titlebar ────────────────────────────────────────────────────────── */
+:root {
+  --titlebar-height: 36px;
+}
+
+.app-titlebar {
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+  position: relative;
+  z-index: 200;
+  user-select: none;
+}
+
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: var(--space-4);
+}
+
+.titlebar-logo {
+  width: 16px;
+  height: 16px;
+  color: var(--accent-primary);
+}
+
+.titlebar-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.titlebar-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+  height: 100%;
+}
+
+.titlebar-btn {
+  width: 46px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.titlebar-btn:hover {
+  background: var(--bg-accent);
+  color: var(--text-primary);
+}
+
+.titlebar-btn-close:hover {
+  background: var(--accent-danger);
+  color: #fff;
+}
+
+.titlebar-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Ajuste de layout: la titlebar ocupa espacio arriba, sidebar y contenido
+   comienzan debajo de ella */
+.sidebar {
+  top: var(--titlebar-height);
+  height: calc(100vh - var(--titlebar-height));
+}
+
+.layout-main {
+  margin-top: 0;
+}
+
+.layout-root {
+  min-height: calc(100vh - var(--titlebar-height));
+  height: calc(100vh - var(--titlebar-height));
 }

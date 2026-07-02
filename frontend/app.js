@@ -1,6 +1,7 @@
 'use strict';
 
 document.addEventListener('DOMContentLoaded', function () {
+  var titlebarHost = document.getElementById('titlebar-host');
   var sidebarHost = document.getElementById('sidebar-host');
   var navbarHost = document.getElementById('navbar-host');
   var view = document.getElementById('view');
@@ -28,6 +29,12 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function mountChrome() {
+    // Titlebar: siempre visible (chrome de la ventana, no de la app)
+    if (titlebarHost && window.NexusComponents && window.NexusComponents.renderTitlebar) {
+      titlebarHost.innerHTML = '';
+      window.NexusComponents.renderTitlebar(titlebarHost);
+    }
+
     if (!hasSession()) {
       if (sidebarHost) sidebarHost.innerHTML = '';
       if (navbarHost) navbarHost.innerHTML = '';

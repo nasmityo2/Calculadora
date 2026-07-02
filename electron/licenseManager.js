@@ -586,6 +586,48 @@ async function activate(app, licenseKey, appVersion, machineName) {
   return { ok: true, info: publicInfo(payload) };
 }
 
+async function autoTrial(app) {
+  const hwid = resolveHwid(app);
+  let resp;
+  try {
+    resp = await postServer('/api/licenses/trial', {
+      hwid,
+      appVersion: (app && typeof app.getVersion === 'function' ? app.getVersion() : '') || '',
+      machineName: (function () { try { return require('os').hostname(); } catch (_e) { return ''; } })()
+    });
+  } catch (e) {
+    return { ok: false, reason: 'offline', message: 'Sin conexión para iniciar la prueba gratuita.' };
+  }
+  if (!resp || !resp.body) return { ok: false, reason: 'offline' };
+  if (!resp.ok || !resp.body.valid) {
+    return {
+      ok: false,
+      reason: (resp.body && resp.body.reason) || 'rejected',
+      message: (resp.body && (resp.body.error || resp.body.message)) || 'No se pudo iniciar la prueba gratuita.',
+      expiredAt: resp.body && resp.body.expiredAt
+    };
+  }
+  const off = verifyTokenOffline(resp.body.token, hwid);
+  if (!off.ok) return { ok: false, reason: 'token_invalid', message: off.motivo };
+  const now = new Date().toISOString();
+  const payload = {
+    licenseKey: resp.body.licenseKey || null,
+    token: resp.body.token,
+    type: resp.body.type || 'trial',
+    status: resp.body.status || 'active',
+    expiresAt: resp.body.expiresAt || null,
+    features: resp.body.features || [],
+    customerName: resp.body.customerName || 'Prueba gratuita',
+    gracePeriodDays: Number(resp.body.gracePeriodDays) || DEFAULT_GRACE_DAYS,
+    activatedAt: now,
+    lastVerifiedAt: now,
+    checksum: sha256hex(resp.body.token + '|' + hwid)
+  };
+  writeLocal(app, hwid, payload);
+  saveHwidCache(app, hwid);
+  return { ok: true, info: publicInfo(payload) };
+}
+
 /**
  * Verificación periódica online. Actualiza token/estado y lastVerifiedAt.
  * @returns {Promise<{ ok:boolean, blocked?:boolean, reason?:string, info?:object }>}
@@ -775,6 +817,7 @@ module.exports = {
   clearLocal,
   verifyTokenOffline,
   activate,
+  autoTrial,
   verifyOnline,
   evaluate,
   deactivate,

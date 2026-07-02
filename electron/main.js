@@ -365,7 +365,7 @@ function registerSetupIpc() {
         await withTimeout(startBackend(), 60_000, 'Inicio del servidor backend');
       }
       startupBackendPreloaded = true;
-      const gate = await evaluateLicenseGate();
+      const gate = await evaluateLicenseGate({ allowAutoTrial: false });
       return { ok: true, licenseActive: gate.ok };
     } catch (err) {
       startupBackendPreloaded = false;
@@ -587,7 +587,8 @@ async function checkLicense() {
  *   3. Lanza verificación online en segundo plano cuando corresponde (no bloquea el arranque).
  * @returns {Promise<{ ok:boolean, source?:string, state?:string, reason?:string, info?:object, estado?:object }>}
  */
-async function evaluateLicenseGate() {
+async function evaluateLicenseGate(opts = {}) {
+  const allowAutoTrial = opts.allowAutoTrial !== false;
   const licenseManager = require('./licenseManager');
   let local;
   try { local = licenseManager.evaluate(app); }
@@ -613,6 +614,24 @@ async function evaluateLicenseGate() {
       console.log(`${LOG_PREFIX} [licencia] gate legado (PostgreSQL) válido — usa el sistema anterior.`);
       return { ok: true, source: 'legacy', estado: legacy.estado };
     }
+
+    if (allowAutoTrial) {
+      const trial = await licenseManager.autoTrial(app);
+      if (trial.ok) {
+        console.log(`${LOG_PREFIX} [licencia] prueba gratuita iniciada — ${trial.info && trial.info.daysRemaining != null ? trial.info.daysRemaining + ' día(s)' : 'vigente'}.`);
+        return { ok: true, source: 'trial', info: trial.info };
+      }
+      if (trial.reason === 'trial_expired' || trial.reason === 'trial_used') {
+        console.warn(`${LOG_PREFIX} [licencia] prueba gratuita agotada para este equipo.`);
+        return { ok: false, state: 'trial_expired', reason: 'Tu prueba gratuita finalizó. Contáctame para adquirir tu licencia.' };
+      }
+      if (trial.reason === 'offline') {
+        console.warn(`${LOG_PREFIX} [licencia] sin internet para iniciar la prueba gratuita.`);
+        return { ok: false, state: 'none', reason: 'Conéctate a internet para iniciar tu prueba gratuita de 7 días.' };
+      }
+      console.warn(`${LOG_PREFIX} [licencia] no se pudo iniciar la prueba: ${trial.message || trial.reason || '—'}`);
+    }
+
     return { ok: false, state: 'none', reason: local.reason, estado: legacy.estado || null };
   }
 
@@ -651,6 +670,7 @@ function createMainWindow() {
     fullscreen: false,
     fullscreenable: true,
     autoHideMenuBar: true,
+    frame: false,
     backgroundColor: getWindowBackgroundColor(app),
     icon: getBrowserWindowIcon(),
     webPreferences: {
@@ -675,6 +695,14 @@ function createMainWindow() {
     if (!isDevToolsEnabled() && input.type === 'mouseDown' && input.button === 'right') {
       event.preventDefault();
     }
+  });
+
+  // Notificar al renderer sobre cambios de maximizado (frameless titlebar)
+  mainWindow.on('maximize', () => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send('window:state', { maximized: true });
+  });
+  mainWindow.on('unmaximize', () => {
+    if (!mainWindow.isDestroyed()) mainWindow.webContents.send('window:state', { maximized: false });
   });
 
   mainWindow.once('ready-to-show', () => {
@@ -797,6 +825,19 @@ function registerBasicIpc() {
     app.focus({ steal: true });
     mainWindow.focus();
     mainWindow.webContents.focus();
+  });
+
+  // ── Controles de ventana Frameless ──────────────────────────────────
+  ipcMain.on('window:minimize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
+  });
+  ipcMain.on('window:toggle-maximize', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+  ipcMain.on('window:close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
   });
 
   // Reemplazo de los diálogos nativos window.confirm / window.alert.

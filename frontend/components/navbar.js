@@ -121,6 +121,22 @@
     });
   }
 
+  /**
+   * Calcula 1–2 iniciales del nombre del usuario para el avatar.
+   * @param {object|null} u
+   * @returns {string}
+   */
+  function getUserInitials(u) {
+    if (!u) return '?';
+    const name = u.nombre_completo || u.username || '';
+    if (!name) return '?';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
   function renderNavbar(container) {
     if (!container) return;
 
@@ -128,78 +144,99 @@
     const header = document.createElement('header');
     header.className = 'app-header';
 
-    const left = document.createElement('div');
-    left.className = 'app-header-block';
-    left.innerHTML =
-      '<div><span class="app-header-label">Sistema</span><div style="font-weight:600">Panel operativo</div></div>';
+    /* ── IZQUIERDA: Ticker de tasas ────────────────────────── */
+    const ticker = document.createElement('div');
+    ticker.className = 'app-header-ticker';
+    ticker.innerHTML =
+      '<span class="app-header-label">Tasas del día · Bs/USD</span>';
 
-    const ratesWrap = document.createElement('div');
-    ratesWrap.className = 'app-header-block';
-    ratesWrap.innerHTML = '<span class="app-header-label">Tasas del día (Bs por USD)</span>';
-
-    const tasasInner = document.createElement('div');
-    tasasInner.style.display = 'flex';
-    tasasInner.style.gap = '1rem';
-    tasasInner.style.flexWrap = 'wrap';
-
-    // BCV: solo visualización. La tasa se actualiza automáticamente desde Configuración → Tasas.
-    const bcvGroup = document.createElement('div');
-    bcvGroup.className = 'tasa-group';
+    // BCV pill
+    const bcvPill = document.createElement('div');
+    bcvPill.className = 'tasa-pill';
+    bcvPill.title = 'Tasa BCV oficial — se actualiza automáticamente. Cambia en Configuración → Tasas.';
     const bcvBadge = document.createElement('span');
     bcvBadge.className = 'tasa-badge';
-    bcvBadge.textContent = 'USD BCV';
-    const bcvWrap = document.createElement('div');
-    bcvWrap.className = 'tasa-input-wrap';
+    bcvBadge.textContent = 'BCV';
     const bcvInp = document.createElement('input');
     bcvInp.type = 'text';
-    bcvInp.className = 'tasa-input';
     bcvInp.id = 'navbar-tasa-bcv';
-    bcvInp.setAttribute('inputmode', 'decimal');
-    bcvInp.setAttribute('aria-label', 'Tasa BCV oficial (Bs por USD)');
-    bcvInp.setAttribute('title', 'Tasa BCV oficial — se actualiza automáticamente. Cambia en Configuración → Tasas.');
+    bcvInp.className = 'tasa-input';
     bcvInp.value = rates.bcv > 0 ? rates.bcv.toFixed(4) : '—';
     bcvInp.readOnly = true;
-    bcvWrap.appendChild(bcvInp);
-    bcvGroup.appendChild(bcvBadge);
-    bcvGroup.appendChild(bcvWrap);
+    bcvPill.appendChild(bcvBadge);
+    bcvPill.appendChild(bcvInp);
+    ticker.appendChild(bcvPill);
 
-    tasasInner.appendChild(bcvGroup);
-
-    // USD mercado: visible solo en multimoneda (se oculta en solo_bcv vía nexus-usd-only).
-    // Igual que el BCV: solo visualización; se edita en Configuración → Tasas.
-    const usdGroup = document.createElement('div');
-    usdGroup.className = 'tasa-group nexus-usd-only';
+    // USD pill (ocultable en solo_bcv)
+    const usdPill = document.createElement('div');
+    usdPill.className = 'tasa-pill nexus-usd-only';
+    usdPill.title = 'Tasa USD de mercado — cámbiala en Configuración → Tasas.';
     const usdBadge = document.createElement('span');
     usdBadge.className = 'tasa-badge';
-    usdBadge.textContent = 'USD Mercado';
-    const usdWrap = document.createElement('div');
-    usdWrap.className = 'tasa-input-wrap';
+    usdBadge.textContent = 'USD';
     const usdInp = document.createElement('input');
     usdInp.type = 'text';
-    usdInp.className = 'tasa-input';
     usdInp.id = 'navbar-tasa-usd';
-    usdInp.setAttribute('inputmode', 'decimal');
-    usdInp.setAttribute('aria-label', 'Tasa USD de mercado (Bs por USD)');
-    usdInp.setAttribute('title', 'Tasa USD de mercado — cámbiala en Configuración → Tasas.');
+    usdInp.className = 'tasa-input';
     usdInp.value = rates.usd > 0 ? rates.usd.toFixed(4) : '—';
     usdInp.readOnly = true;
-    usdWrap.appendChild(usdInp);
-    usdGroup.appendChild(usdBadge);
-    usdGroup.appendChild(usdWrap);
+    usdPill.appendChild(usdBadge);
+    usdPill.appendChild(usdInp);
+    ticker.appendChild(usdPill);
 
-    tasasInner.appendChild(usdGroup);
-    ratesWrap.appendChild(tasasInner);
+    /* ── CENTRO: Buscador global ───────────────────────────── */
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'app-search';
 
-    const right = document.createElement('div');
-    right.className = 'header-meta';
+    // Lupa SVG inline
+    const searchIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    searchIcon.setAttribute('class', 'app-search-icon');
+    searchIcon.setAttribute('viewBox', '0 0 24 24');
+    searchIcon.setAttribute('stroke', 'currentColor');
+    searchIcon.setAttribute('fill', 'none');
+    searchIcon.setAttribute('stroke-width', '2');
+    const searchPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    searchPath.setAttribute('d', 'M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z');
+    searchIcon.appendChild(searchPath);
 
+    const searchInput = document.createElement('input');
+    searchInput.id = 'navbar-global-search';
+    searchInput.className = 'app-search-input';
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Buscar productos, clientes, facturas…';
+    searchInput.setAttribute('aria-label', 'Búsqueda global');
+
+    const searchKbd = document.createElement('kbd');
+    searchKbd.className = 'app-search-kbd';
+    searchKbd.textContent = 'Ctrl K';
+
+    // TODO: enganchar navegación de búsqueda global
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const q = searchInput.value.trim();
+        if (q) {
+          window.dispatchEvent(
+            new CustomEvent('nexus:global-search', { detail: { q } })
+          );
+        }
+      }
+    });
+
+    searchWrap.appendChild(searchIcon);
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(searchKbd);
+
+    /* ── DERECHA: Acciones ─────────────────────────────────── */
+    const actions = document.createElement('div');
+    actions.className = 'header-actions';
+
+    // Clock
     const clockBox = document.createElement('div');
-    clockBox.style.textAlign = 'right';
+    clockBox.className = 'header-clock-box';
     const clockEl = document.createElement('div');
     clockEl.className = 'header-clock';
     const dateEl = document.createElement('div');
-    dateEl.style.fontSize = '0.75rem';
-    dateEl.style.color = 'var(--text-muted)';
+    dateEl.className = 'header-date';
     clockBox.appendChild(clockEl);
     clockBox.appendChild(dateEl);
 
@@ -211,8 +248,63 @@
     tick();
     setInterval(tick, 1000);
 
-    const userBox = document.createElement('div');
-    userBox.className = 'header-user-block';
+    // DB status pill
+    const dbBox = document.createElement('div');
+    dbBox.className = 'db-status';
+    dbBox.title = 'Comprobando conexión…';
+    const dbDot = document.createElement('span');
+    dbDot.className = 'db-status-dot is-pending';
+    const dbLbl = document.createElement('span');
+    dbLbl.textContent = 'BD';
+    dbBox.appendChild(dbDot);
+    dbBox.appendChild(dbLbl);
+
+    const DB_HEALTH_POLL_MS = 30000;
+
+    async function pingDatabaseHealth() {
+      const base = String(window.NEXUS_API_BASE || 'http://127.0.0.1:3000').replace(/\/$/, '');
+      const url = `${base}/health/db`;
+      try {
+        const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+        let body = null;
+        try {
+          body = await res.json();
+        } catch (e) {
+          body = null;
+        }
+        if (res.ok && body && body.ok === true && body.database) {
+          dbDot.classList.remove('is-offline', 'is-pending');
+          dbDot.title = `PostgreSQL conectado (${body.database})`;
+          dbBox.title = dbDot.title;
+          return;
+        }
+        dbDot.classList.add('is-offline');
+        dbDot.classList.remove('is-pending');
+        dbDot.title =
+          body && typeof body.error === 'string' ? body.error : 'Sin conexión a PostgreSQL';
+        dbBox.title = dbDot.title;
+      } catch (err) {
+        dbDot.classList.add('is-offline');
+        dbDot.classList.remove('is-pending');
+        dbDot.title =
+          err && err.message
+            ? 'No se alcanza el servidor'
+            : 'Sin conexión al servidor o a PostgreSQL';
+        dbBox.title = dbDot.title;
+      }
+    }
+
+    void pingDatabaseHealth();
+    setInterval(() => void pingDatabaseHealth(), DB_HEALTH_POLL_MS);
+
+    // User chip (avatar + nombre/rol)
+    const userChip = document.createElement('div');
+    userChip.className = 'user-chip';
+
+    const avatarEl = document.createElement('span');
+    avatarEl.className = 'user-avatar';
+    avatarEl.setAttribute('aria-hidden', 'true');
+    avatarEl.textContent = '--';
 
     const userCol = document.createElement('div');
     userCol.className = 'header-user';
@@ -237,6 +329,10 @@
                 ? 'Usuario #' + u.id
                 : 'Sin iniciar sesión';
       }
+      // Iniciales en avatar
+      if (avatarEl) {
+        avatarEl.textContent = getUserInitials(u);
+      }
       if (logoutBtn) {
         logoutBtn.style.visibility =
           window.NexusAuth && window.NexusAuth.getAccessToken && window.NexusAuth.getAccessToken()
@@ -245,11 +341,38 @@
       }
     }
 
+    userChip.appendChild(avatarEl);
+    userChip.appendChild(userCol);
+
+    // Logout — ahora icono SVG inline
     const logoutBtn = document.createElement('button');
     logoutBtn.type = 'button';
-    logoutBtn.className = 'btn-logout-header';
+    logoutBtn.className = 'icon-btn btn-logout-header';
     logoutBtn.setAttribute('aria-label', 'Cerrar sesión');
-    logoutBtn.textContent = 'Cerrar sesión';
+    logoutBtn.title = 'Cerrar sesión';
+
+    const logoutSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    logoutSvg.setAttribute('width', '18');
+    logoutSvg.setAttribute('height', '18');
+    logoutSvg.setAttribute('viewBox', '0 0 24 24');
+    logoutSvg.setAttribute('stroke', 'currentColor');
+    logoutSvg.setAttribute('fill', 'none');
+    logoutSvg.setAttribute('stroke-width', '2');
+    const logoutPath1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    logoutPath1.setAttribute('d', 'M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4');
+    const logoutPath2 = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    logoutPath2.setAttribute('points', '16 17 21 12 16 7');
+    const logoutPath3 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    logoutPath3.setAttribute('x1', '21');
+    logoutPath3.setAttribute('y1', '12');
+    logoutPath3.setAttribute('x2', '9');
+    logoutPath3.setAttribute('y2', '12');
+    logoutSvg.appendChild(logoutPath1);
+    logoutSvg.appendChild(logoutPath2);
+    logoutSvg.appendChild(logoutPath3);
+    logoutBtn.appendChild(logoutSvg);
+
+    // Mismo listener de logout que antes
     logoutBtn.addEventListener('click', () => {
       if (window.NexusAuth && typeof window.NexusAuth.logout === 'function') {
         void Promise.resolve(window.NexusAuth.logout()).then((cleared) => {
@@ -262,66 +385,22 @@
       }
     });
 
-    userBox.appendChild(userCol);
-    userBox.appendChild(logoutBtn);
     applyUserHeader();
     // Reemplazar handler previo para evitar acumulación de listeners en ciclos login/logout
     if (_sessionHandler) window.removeEventListener('nexus:session', _sessionHandler);
     _sessionHandler = applyUserHeader;
     window.addEventListener('nexus:session', applyUserHeader);
 
-    const dbBox = document.createElement('div');
-    dbBox.className = 'db-status';
-    const dbDot = document.createElement('span');
-    dbDot.className = 'db-status-dot is-pending';
-    dbDot.title = 'Comprobando conexión…';
-    const dbLbl = document.createElement('span');
-    dbLbl.textContent = 'BD';
-    dbBox.appendChild(dbDot);
-    dbBox.appendChild(dbLbl);
+    // Ensamblar zona derecha
+    actions.appendChild(clockBox);
+    actions.appendChild(dbBox);
+    actions.appendChild(userChip);
+    actions.appendChild(logoutBtn);
 
-    const DB_HEALTH_POLL_MS = 30000;
-
-    async function pingDatabaseHealth() {
-      const base = String(window.NEXUS_API_BASE || 'http://127.0.0.1:3000').replace(/\/$/, '');
-      const url = `${base}/health/db`;
-      try {
-        const res = await fetch(url, { method: 'GET', cache: 'no-store' });
-        let body = null;
-        try {
-          body = await res.json();
-        } catch (e) {
-          body = null;
-        }
-        if (res.ok && body && body.ok === true && body.database) {
-          dbDot.classList.remove('is-offline', 'is-pending');
-          dbDot.title = `PostgreSQL conectado (${body.database})`;
-          return;
-        }
-        dbDot.classList.add('is-offline');
-        dbDot.classList.remove('is-pending');
-        dbDot.title =
-          body && typeof body.error === 'string' ? body.error : 'Sin conexión a PostgreSQL';
-      } catch (err) {
-        dbDot.classList.add('is-offline');
-        dbDot.classList.remove('is-pending');
-        dbDot.title =
-          err && err.message
-            ? 'No se alcanza el servidor'
-            : 'Sin conexión al servidor o a PostgreSQL';
-      }
-    }
-
-    void pingDatabaseHealth();
-    setInterval(() => void pingDatabaseHealth(), DB_HEALTH_POLL_MS);
-
-    right.appendChild(clockBox);
-    right.appendChild(userBox);
-    right.appendChild(dbBox);
-
-    header.appendChild(left);
-    header.appendChild(ratesWrap);
-    header.appendChild(right);
+    /* ── ENSAMBLAR HEADER ──────────────────────────────────── */
+    header.appendChild(ticker);
+    header.appendChild(searchWrap);
+    header.appendChild(actions);
 
     container.appendChild(header);
   }

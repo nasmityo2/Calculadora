@@ -22,7 +22,14 @@ contextBridge.exposeInMainWorld('nexusCore', {
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   focusWindow: () => ipcRenderer.invoke('window:focus'),
   /** Persiste tema en userData para backgroundColor de ventanas Electron */
-  saveThemePreference: (tema) => ipcRenderer.invoke('theme:save', tema)
+  saveThemePreference: (tema) => ipcRenderer.invoke('theme:save', tema),
+  /** Controles de ventana frameless (minimizar, maximizar/restaurar, cerrar) */
+  windowControls: {
+    minimize: () => ipcRenderer.send('window:minimize'),
+    toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    close: () => ipcRenderer.send('window:close'),
+    onStateChange: (cb) => ipcRenderer.on('window:state', (_e, s) => cb(s))
+  }
 });
 
 // Diálogos nativos seguros para el foco. window.confirm/window.alert de Chromium

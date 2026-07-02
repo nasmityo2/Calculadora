@@ -141,10 +141,22 @@ function sendOk(res, data) {
   res.status(200).json({ ok: true, ...data });
 }
 
+function validateTrialInput(body) {
+  const raw = body || {};
+  const hwid = String(raw.hwid || '').trim().toLowerCase();
+  if (!hwid) { const e = new Error('El campo "hwid" es obligatorio.'); e.status = 400; throw e; }
+  if (!HWID_REGEX.test(hwid)) { const e = new Error('Formato de Hardware ID inválido.'); e.status = 400; throw e; }
+  if (/^(.)\1+$/.test(hwid.replace(/-/g, ''))) { const e = new Error('Hardware ID no válido para este sistema.'); e.status = 400; throw e; }
+  const machineName = String(raw.machineName || raw.machine_name || '').trim().slice(0, 120);
+  const appVersion = String(raw.appVersion || raw.app_version || '').trim().slice(0, 40);
+  return { hwid, machineName, appVersion };
+}
+
 module.exports = {
   validateActivationInput,
   validateLicenseClientInput,
   validateAdminAuth,
+  validateTrialInput,
   applySecurityHeaders,
   sendError,
   sendOk,

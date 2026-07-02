@@ -32,10 +32,9 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
  * Banner de expiración / estado de licencia (Fase 4.4.6).
  *
  * Comportamiento:
- *   - Prueba (trial): banner visible siempre con «Prueba: X día(s) restantes».
+ *   - Prueba (trial): banner visible siempre con «Versión de prueba · N día(s) restantes».
  *   - Suscripción: banner cuando faltan ≤ UMBRAL días (default 15).
  *   - Permanente: sin banner de vencimiento (salvo suspensión).
- *   - Color progresivo según días restantes: verde → amarillo → naranja → rojo (sin neón).
  *   - Estados bloqueantes (suspendida/revocada/vencida/gracia excedida): overlay que impide
  *     usar el sistema hasta reactivar.
  *
@@ -45,7 +44,6 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
  */
 (function () {
   var UMBRAL_DEFAULT = 15;
-  var STYLE_ID = 'nexus-lic-banner-style';
   var BANNER_ID = 'nexus-lic-banner';
   var OVERLAY_ID = 'nexus-lic-overlay';
 
@@ -59,55 +57,34 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
     none:           'Sin licencia activa. Activa Nexus Core para continuar.'
   };
 
-  function ensureStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var css =
-      '#' + BANNER_ID + '{position:sticky;top:0;z-index:900;font-family:var(--font-ui,sans-serif);' +
-      'font-size:12.5px;padding:7px 16px;display:flex;align-items:center;justify-content:center;gap:10px;' +
-      'border-bottom:1px solid var(--border-primary,#1a2540);text-align:center;}' +
-      '#' + BANNER_ID + ' .nlb-days{font-family:var(--font-mono,monospace);font-weight:600;}' +
-      '#' + BANNER_ID + '.nlb-info{background:rgba(59,130,246,.10);color:#93c5fd;border-bottom-color:rgba(59,130,246,.25);}' +
-      '#' + BANNER_ID + '.nlb-ok{background:rgba(34,197,94,.10);color:#4ade80;border-bottom-color:rgba(34,197,94,.25);}' +
-      '#' + BANNER_ID + '.nlb-warn{background:rgba(245,158,11,.12);color:#fcd34d;border-bottom-color:rgba(245,158,11,.3);}' +
-      '#' + BANNER_ID + '.nlb-orange{background:rgba(234,88,12,.14);color:#fdba74;border-bottom-color:rgba(234,88,12,.35);}' +
-      '#' + BANNER_ID + '.nlb-danger{background:rgba(239,68,68,.14);color:#fca5a5;border-bottom-color:rgba(239,68,68,.4);}' +
-      '#' + OVERLAY_ID + '{position:fixed;inset:0;z-index:99999;background:rgba(5,8,15,.92);' +
-      'display:flex;align-items:center;justify-content:center;padding:24px;font-family:var(--font-ui,sans-serif);}' +
-      '#' + OVERLAY_ID + ' .nlo-card{max-width:440px;background:var(--bg-secondary,#090d18);border:1px solid var(--border-primary,#1a2540);' +
-      'border-top:3px solid #ef4444;border-radius:10px;padding:28px 26px;text-align:center;}' +
-      '#' + OVERLAY_ID + ' h2{font-family:var(--font-display,sans-serif);text-transform:uppercase;letter-spacing:.05em;' +
-      'color:#fca5a5;font-size:18px;margin:0 0 10px;}' +
-      '#' + OVERLAY_ID + ' p{color:var(--text-secondary,#7a8fa8);font-size:13.5px;line-height:1.6;margin:0;}';
-    var st = document.createElement('style');
-    st.id = STYLE_ID;
-    st.textContent = css;
-    document.head.appendChild(st);
-  }
+  var WARN_ICON_SVG =
+    '<svg class="lic-banner-icon" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M7.5 1L1 13.5h13L7.5 1z" stroke="currentColor" stroke-width="1.1" fill="none"/>' +
+      '<path d="M7.5 5.5v3.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>' +
+      '<circle cx="7.5" cy="11.25" r="0.6" fill="currentColor"/>' +
+    '</svg>';
 
   function removeEl(id) { var e = document.getElementById(id); if (e) e.remove(); }
 
-  function colorClass(dias, isTrial) {
-    if (dias == null) return 'nlb-info';
-    if (dias <= 1) return 'nlb-danger';
-    if (dias <= 3) return 'nlb-orange';
-    if (dias <= 7) return 'nlb-warn';
-    return isTrial ? 'nlb-info' : 'nlb-ok';
+  function stateClass(dias) {
+    if (dias != null && dias <= 1) return 'is-critical';
+    return 'is-trial';
   }
 
-  function renderBanner(text, cls) {
-    ensureStyle();
+  function renderBanner(textHtml, cls) {
     removeEl(BANNER_ID);
     var bar = document.createElement('div');
     bar.id = BANNER_ID;
-    bar.className = cls;
-    bar.innerHTML = text;
-    // Insertar al principio del layout principal si existe; si no, al inicio del body.
+    bar.className = 'lic-banner ' + cls;
+    bar.innerHTML = WARN_ICON_SVG +
+      '<span class="lic-banner-text">' + textHtml + '</span>' +
+      '<button class="lic-banner-cta">Activar licencia</button>';
+    // TODO: conectar con acción existente de activación (ej. abrir config → sección licencia)
     var host = document.querySelector('.layout-main') || document.querySelector('main') || document.body;
     host.insertBefore(bar, host.firstChild);
   }
 
   function renderOverlay(reason) {
-    ensureStyle();
     removeEl(OVERLAY_ID);
     var ov = document.createElement('div');
     ov.id = OVERLAY_ID;
@@ -134,17 +111,17 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
     }
 
     var info = status.info || {};
-    if (info.isPermanent) return; // permanente activa: sin banner
+    if (info.isPermanent) return;
     var dias = info.daysRemaining;
     var umbral = UMBRAL_DEFAULT;
 
     if (info.isTrial) {
-      var dTxt = dias != null ? '<span class="nlb-days">' + dias + '</span> día(s) restantes' : 'vigente';
-      renderBanner('Versión de prueba — ' + dTxt + '. Activa la licencia completa con tu proveedor.', colorClass(dias, true));
+      var dTxt = dias != null ? '<strong>' + dias + '</strong> día(s) restantes' : 'vigente';
+      renderBanner('Versión de prueba · ' + dTxt, stateClass(dias));
       return;
     }
     if (dias != null && dias <= umbral) {
-      renderBanner('Tu licencia vence en <span class="nlb-days">' + dias + '</span> día(s). Renueva para evitar interrupciones.', colorClass(dias, false));
+      renderBanner('Tu licencia vence en <strong>' + dias + '</strong> día(s). Renueva para evitar interrupciones.', stateClass(dias));
     }
   }
 
@@ -154,10 +131,9 @@ window.formatExpiraLicenciaUi = function formatExpiraLicenciaUi(raw) {
   }
 
   function autoMount() {
-    // Solo en la ventana principal (NexusComponents lo define components/navbar.js).
     if (!window.NexusComponents) return;
     check();
-    setInterval(check, 60 * 60 * 1000); // cada hora
+    setInterval(check, 60 * 60 * 1000);
     window.addEventListener('focus', check);
   }
 
