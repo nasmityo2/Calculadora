@@ -140,6 +140,9 @@
     <ClCompile Include="..\src\addon.c">
       <ObjectFileName>$(IntDir)\src\addon.obj</ObjectFileName>
     </ClCompile>
+    <ClCompile Include="..\src\tweetnacl.c">
+      <ObjectFileName>$(IntDir)\src\tweetnacl.obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="E:\Users\windows\Documents\nexuscore\node_modules\node-gyp\src\win_delay_load_hook.cc"/>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets"/>
