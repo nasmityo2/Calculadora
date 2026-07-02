@@ -28,7 +28,8 @@ contextBridge.exposeInMainWorld('nexusCore', {
     minimize: () => ipcRenderer.send('window:minimize'),
     toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
     close: () => ipcRenderer.send('window:close'),
-    onStateChange: (cb) => ipcRenderer.on('window:state', (_e, s) => cb(s))
+    onStateChange: (cb) => ipcRenderer.on('window:state', (_e, s) => cb(s)),
+    onResized: (cb) => ipcRenderer.on('window:resized', (_e, s) => cb(s))
   }
 });
 

@@ -191,6 +191,16 @@
         maxBtn.appendChild(isMax ? restoreSvg() : maxSvg());
         maxBtn.setAttribute('aria-label', isMax ? 'Restaurar' : 'Maximizar');
       });
+      // Forzar re-flow del body al redimensionar para limpiar tooltip nativo de Windows
+      if (ctrl.onResized) {
+        ctrl.onResized(function () {
+          // Forzar reflow del contenedor titlebar para limpiar overlays del SO
+          bar.style.transform = 'translateZ(0)';
+          requestAnimationFrame(function () {
+            bar.style.transform = '';
+          });
+        });
+      }
     }
 
     bar.appendChild(controls);

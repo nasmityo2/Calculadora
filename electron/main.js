@@ -671,6 +671,7 @@ function createMainWindow() {
     fullscreenable: true,
     autoHideMenuBar: true,
     frame: false,
+    titleBarStyle: 'hidden',
     backgroundColor: getWindowBackgroundColor(app),
     icon: getBrowserWindowIcon(),
     webPreferences: {
@@ -703,6 +704,16 @@ function createMainWindow() {
   });
   mainWindow.on('unmaximize', () => {
     if (!mainWindow.isDestroyed()) mainWindow.webContents.send('window:state', { maximized: false });
+  });
+  // Al redimensionar se re-mueve cualquier residuo del tooltip nativo de Windows
+  // forzando un pequeño re-dibujo invisible que limpia la superposición de dimensiones.
+  mainWindow.on('resize', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isMaximized()) {
+      mainWindow.webContents.send('window:resized', {
+        width: mainWindow.getSize()[0],
+        height: mainWindow.getSize()[1]
+      });
+    }
   });
 
   mainWindow.once('ready-to-show', () => {
