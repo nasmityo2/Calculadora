@@ -20,6 +20,9 @@ const {
 } = require('./themePreference');
 const LOG_PREFIX = '[nexus-core]';
 
+// TEMP-PRUEBA-NATIVE — prueba de que el addon nativo nexus-verify carga correctamente
+try { console.log('[nexus-verify] selfTest =', require('nexus-verify').selfTest()); } catch (e) { console.error('[nexus-verify] error de carga:', e && e.message); }
+
 // userData/config.env (asistente) → .env del proyecto (dev) → defaults
 loadNexusEnv(app);
 

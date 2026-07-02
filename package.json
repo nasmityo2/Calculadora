@@ -27,6 +27,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^8.5.0",
+    "nexus-verify": "file:native/nexus-verify",
     "chart.js": "3.9.1",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
@@ -126,6 +127,7 @@
     "compression": "maximum",
     "removePackageScripts": true,
     "npmRebuild": true,
+    "asarUnpack": [ "**/*.node" ],
     "afterPack": "scripts/afterPack-fuses.js"
   }
 }

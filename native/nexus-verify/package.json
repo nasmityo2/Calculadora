@@ -1,0 +1,10 @@
+{
+  "name": "nexus-verify",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "install": "node-gyp rebuild --target=22.3.27 --dist-url=https://electronjs.org/headers"
+  },
+  "gypfile": true
+}
