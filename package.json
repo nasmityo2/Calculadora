@@ -45,6 +45,7 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^3.7.2",
     "electron": "22.3.27",
     "electron-builder": "^25.1.8",
@@ -124,6 +125,7 @@
     "extraFiles": [],
     "compression": "maximum",
     "removePackageScripts": true,
-    "npmRebuild": true
+    "npmRebuild": true,
+    "afterPack": "scripts/afterPack-fuses.js"
   }
 }

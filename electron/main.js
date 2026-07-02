@@ -146,8 +146,8 @@ const isDev = !app.isPackaged;
 /** true si NEXUS_DEVTOOLS=1 (pruebas en .exe instalado). */
 function isDevToolsEnabled() {
   if (isDev) return true;
-  const v = String(process.env.NEXUS_DEVTOOLS || '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
+  // Producción (empaquetado): DevTools SIEMPRE deshabilitadas, aunque exista NEXUS_DEVTOOLS.
+  return false;
 }
 
 function openDevToolsDetached(webContents, label) {
