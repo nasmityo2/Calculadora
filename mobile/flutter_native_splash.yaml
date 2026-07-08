@@ -1,0 +1,15 @@
+# DAYZO Splash Screen Configuration
+# Matches the app's dark theme (#0B0E11)
+# The splash blends seamlessly into the app background.
+
+flutter_native_splash:
+  color: "#0B0E11"
+  image: assets/dayzo_splash_logo.png
+  
+  android_12:
+    color: "#0B0E11"
+    icon_background_color: "#0B0E11"
+    image: assets/dayzo_splash_logo.png
+
+  web: false
+  ios: false

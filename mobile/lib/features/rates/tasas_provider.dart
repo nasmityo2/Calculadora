@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:dayzo_app/core/db/local_db.dart';
+import 'package:dayzo_app/core/widget/home_widget_service.dart';
 import 'package:dayzo_app/data/models/tasas_data.dart';
 import 'package:dayzo_app/data/repositories/tasas_repository.dart';
 import 'package:dayzo_app/features/calculator/currency_calculator.dart';
@@ -11,10 +13,16 @@ class TasasProvider extends ChangeNotifier {
 
   final TasasRepository _repository;
 
+  /// Optional callback fired after each WebSocket update with the latest values.
+  /// Used by AlertsProvider to evaluate alert rules.
+  void Function(TasasSnapshot snapshot)? onRateUpdate;
+
   TasasSnapshot? snapshot;
   bool loading = true;
   bool refreshing = false;
   String? error;
+  bool stale = false;
+  int? cachedAt;
 
   CalcMode calcMode = CalcMode.ves;
   String amountRaw = '';
@@ -56,6 +64,8 @@ class TasasProvider extends ChangeNotifier {
     }
     _recompute();
     notifyListeners();
+    onRateUpdate?.call(snapshot!);
+    HomeWidgetService.updateHomeWidget(snapshot!);
   }
 
   Future<void> refresh() async {
@@ -65,13 +75,24 @@ class TasasProvider extends ChangeNotifier {
       refreshing = true;
     }
     error = null;
+    stale = false;
     notifyListeners();
 
     try {
       snapshot = await _repository.fetchTasas();
       _recompute();
+      if (snapshot != null) HomeWidgetService.updateHomeWidget(snapshot!);
     } catch (e) {
-      error = e.toString();
+      final cached = await _repository.getCachedSnapshot();
+      if (cached != null) {
+        snapshot = cached;
+        stale = true;
+        final updatedAt = await LocalDb().getSnapshotUpdatedAt();
+        cachedAt = updatedAt;
+        _recompute();
+      } else {
+        error = e.toString();
+      }
     } finally {
       loading = false;
       refreshing = false;

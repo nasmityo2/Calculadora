@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:dayzo_app/core/config/api_config.dart';
+import 'package:dayzo_app/core/db/local_db.dart';
 import 'package:dayzo_app/data/models/tasas_data.dart';
 
 class TasasRepository {
@@ -32,7 +33,26 @@ class TasasRepository {
       // Stats opcionales: la app sigue funcionando sin ellas.
     }
 
+    // Persistir en caché local tras un fetch exitoso.
+    unawaited(_cacheSnapshot(snapshot));
+
     return snapshot;
+  }
+
+  Future<void> _cacheSnapshot(TasasSnapshot snapshot) async {
+    try {
+      await LocalDb().saveSnapshot(snapshot);
+    } catch (_) {
+      // Fallo de caché no crítico.
+    }
+  }
+
+  Future<TasasSnapshot?> getCachedSnapshot() async {
+    try {
+      return await LocalDb().getSnapshot();
+    } catch (_) {
+      return null;
+    }
   }
 
   void connectWebSocket(void Function(TasasSnapshot) onUpdate) {

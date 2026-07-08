@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#1E2329">
+
+    <TextView
+        android:id="@+id/widget_label_binance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Binance Compra"
+        android:textColor="#848E9C"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_value_binance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="-- Bs"
+        android:textColor="#0ECB81"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/widget_label_bcv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="BCV"
+        android:textColor="#848E9C"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_value_bcv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="-- Bs"
+        android:textColor="#3B82F6"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/widget_timestamp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--:--"
+        android:textColor="#848E9C"
+        android:textSize="9sp" />
+
+</LinearLayout>

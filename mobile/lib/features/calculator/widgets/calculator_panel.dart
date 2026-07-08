@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:dayzo_app/features/rates/tasas_provider.dart';
 import 'package:dayzo_app/shared/theme/dayzo_theme.dart';
@@ -73,9 +74,29 @@ class _CalculatorPanelState extends State<CalculatorPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Calculadora',
-            style: displayLogoStyle().copyWith(fontSize: 18),
+          Row(
+            children: [
+              Text(
+                'Calculadora',
+                style: displayLogoStyle().copyWith(fontSize: 18),
+              ),
+              const Spacer(),
+              SizedBox(
+                height: 28,
+                child: TextButton.icon(
+                  onPressed: () => context.push('/calculadora-historica'),
+                  icon: const Icon(Icons.history, size: 14),
+                  label: const Text('Usar fecha pasada', style: TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: DayzoColors.textSoft,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(

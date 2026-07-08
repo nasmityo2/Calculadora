@@ -26,4 +26,23 @@ class ApiConfig {
       path: '/tasas-ws',
     );
   }
+
+  static Uri historialUri({required String range}) {
+    return Uri.parse('$baseUrl/api/tasas-venezuela').replace(
+      queryParameters: {
+        'range': range,
+        'stats': '1',
+      },
+    );
+  }
+
+  static Uri tasasHistoricasUri({required String fecha, String? hora}) {
+    final params = <String, String>{'fecha': fecha};
+    if (hora != null && hora.isNotEmpty) {
+      params['hora'] = hora;
+    }
+    return Uri.parse('$baseUrl/api/tasas-historicas').replace(
+      queryParameters: params,
+    );
+  }
 }

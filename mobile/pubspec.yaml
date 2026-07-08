@@ -43,3 +43,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/dayzo_splash_logo.png
