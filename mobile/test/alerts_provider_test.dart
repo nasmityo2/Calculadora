@@ -99,7 +99,7 @@ void main() {
       // First cross
       expect(provider.evaluate(dataWith(105)), hasLength(1));
 
-      // Same state (still fired) → debounce blocks immediate re-fire
+      // Same state (still fired) → no re-fire (flanco puro)
       expect(provider.evaluate(dataWith(110)), isEmpty);
 
       // Re-arm → _lastFiredAt is cleared
@@ -108,6 +108,28 @@ void main() {
       // Re-cross → fires because it's a clean edge
       final result = provider.evaluate(dataWith(105));
       expect(result, hasLength(1));
+    });
+
+    test('mantenerse cruzado con reloj avanzado >2s NO re-dispara (flanco puro)', () {
+      int fakeNow = 0;
+      provider.setNowOverride(() => DateTime.fromMillisecondsSinceEpoch(fakeNow));
+
+      // Primer cruce en t=0
+      var result = provider.evaluate(dataWith(105));
+      expect(result, hasLength(1));
+      expect(result[0].$1.id, 'test-1');
+
+      // Avanzar 3s, seguir sobre el umbral → NO debe re-disparar
+      fakeNow = 3000;
+      result = provider.evaluate(dataWith(110));
+      expect(result, isEmpty);
+
+      // Avanzar 10s más → sigue sin disparar (flanco puro)
+      fakeNow = 13000;
+      result = provider.evaluate(dataWith(120));
+      expect(result, isEmpty);
+
+      provider.clearNowOverride();
     });
   });
 }

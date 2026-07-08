@@ -17,8 +17,12 @@ class AlertsProvider extends ChangeNotifier {
   /// Tracks whether each rule was in "fired" state at last evaluation.
   final Map<String, bool> _wasFired = {};
 
-  /// Tracks last-fire time per rule id for debounce anti-rebote (2 s).
+  /// Tracks last-fire time per rule id for anti-rebote en el mismo instante.
+  /// Solo se usa como safety en flanco limpio; no re-dispara mientras se mantiene fired.
   final Map<String, int> _lastFiredAt = {};
+
+  /// Override de reloj para tests. Si es null, usa DateTime.now().
+  DateTime Function()? _nowOverride;
 
   Future<void> init() async {
     _rules = await _repository.load();
@@ -55,12 +59,21 @@ class AlertsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Expone un override de reloj para tests. Retorno a null para usar DateTime.now().
+  void setNowOverride(DateTime Function() nowOverride) {
+    _nowOverride = nowOverride;
+  }
+
+  void clearNowOverride() {
+    _nowOverride = null;
+  }
+
   /// Evaluates all active rules against current rate values.
   /// Fires ONLY on edge (flanco): transition from not-fired → fired.
   /// Re-arms when value goes back to the safe side.
   /// Returns a list of (rule, value) pairs that fired.
   List<(AlertRule, double)> evaluate(TasasSnapshotForAlerts data) {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = (_nowOverride?.call() ?? DateTime.now()).millisecondsSinceEpoch;
     final triggered = <(AlertRule, double)>[];
 
     for (final rule in _rules) {
@@ -81,19 +94,13 @@ class AlertsProvider extends ChangeNotifier {
 
       if (currentlyFired) {
         if (!wasFired) {
-          // Clean edge: not-fired → fired, always fire immediately.
+          // Clean edge: not-fired → fired.
           _lastFiredAt[rule.id] = now;
           triggered.add((rule, value));
-        } else {
-          // Still fired: debounce to avoid re-triggering within 2 s.
-          final last = _lastFiredAt[rule.id];
-          if (last == null || (now - last) >= 2000) {
-            _lastFiredAt[rule.id] = now;
-            triggered.add((rule, value));
-          }
         }
+        // else: still fired — NO re-dispara. Flanco puro.
       } else {
-        // Re-arm: reset debounce timer so next clean edge fires.
+        // Re-arm: reset debounce so next clean edge fires.
         _lastFiredAt.remove(rule.id);
       }
 
