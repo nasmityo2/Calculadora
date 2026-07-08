@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>DAYZO — Acceso</title>
+  <meta name="description" content="DAYZO · Tasas Binance P2P y BCV en tiempo real. Inicia sesión para guardar tus cotizaciones de importación.">
+  <meta name="theme-color" content="#0B0E11">
+  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2534/2534204.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Mismo sistema visual que la app -->
+  <link rel="stylesheet" href="/styles.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    /* ─── LOGIN · usa los tokens de /styles.css ─────────────────────────── */
+    .l-wrap {
+      min-height: 100svh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--s5);
+      padding: clamp(1.25rem, 5vw, 2.5rem) var(--s4);
+      padding-top: calc(clamp(1.25rem, 5vw, 2.5rem) + env(safe-area-inset-top));
+      padding-bottom: calc(clamp(1.25rem, 5vw, 2.5rem) + env(safe-area-inset-bottom));
+    }
+
+    .l-stack {
+      width: 100%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--s4);
+      animation: l-rise 0.5s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes l-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Marca */
+    .l-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--s2);
+    }
+    .l-brand__logo {
+      margin: 0;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: clamp(2rem, 7vw, 2.8rem);
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: var(--accent);
+      text-shadow: 0 0 28px rgba(232,84,26,0.4);
+    }
+    .l-dot {
+      width: 9px; height: 9px;
+      border-radius: var(--r-full);
+      background: var(--green);
+      animation: pulse-live 2s ease-in-out infinite;
+      align-self: flex-start;
+      margin-top: 0.4rem;
+    }
+    .l-tag {
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-soft);
+      margin: calc(-1 * var(--s2)) 0 0;
+    }
+
+    /* Tasas en vivo (mismo lenguaje que c-rate-card) */
+    .l-rates {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--s2);
+    }
+    .l-rate {
+      background: linear-gradient(145deg, var(--bg-card) 0%, rgba(27,32,38,0.95) 100%);
+      border: var(--border);
+      border-radius: var(--r-lg);
+      padding: var(--s3);
+      box-shadow: var(--shadow-sm);
+      min-width: 0;
+    }
+    .l-rate--spread { border-color: rgba(167,139,250,0.22); }
+    .l-rate__label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-soft);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .l-rate__dot {
+      width: 6px; height: 6px; border-radius: var(--r-full); flex-shrink: 0;
+    }
+    .l-rate__dot--green { background: var(--green); }
+    .l-rate__dot--blue  { background: var(--blue); }
+    .l-rate__dot--purple{ background: var(--purple); }
+    .l-rate__val {
+      font-family: var(--font-mono);
+      font-size: clamp(0.95rem, 3.4vw, 1.2rem);
+      font-weight: 500;
+      color: var(--text-ink);
+      line-height: 1.2;
+      margin-top: 4px;
+      transition: color 0.4s ease;
+    }
+    .l-rate__val.flash { color: var(--accent); }
+    .l-rate--spread .l-rate__val { color: var(--purple); }
+    .l-rate__unit { font-family: var(--font-mono); font-size: 0.58rem; color: var(--text-ghost); }
+    .l-rates-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--s3);
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      color: var(--text-soft);
+    }
+    .l-rates-foot b { color: var(--text-ink); font-weight: 500; }
+    .l-up { color: var(--green); }
+    .l-down { color: var(--red); }
+
+    /* Tarjeta de autenticación (mismo lenguaje que c-calc-card) */
+    .l-card {
+      background: linear-gradient(145deg, var(--bg-card) 0%, rgba(27,32,38,0.95) 100%);
+      border: var(--border);
+      border-radius: var(--r-xl);
+      box-shadow: var(--shadow-lg);
+      padding: clamp(1.25rem, 5vw, 1.75rem);
+    }
+
+    .l-tabs {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      margin-bottom: var(--s5);
+    }
+    .l-tab {
+      position: relative;
+      z-index: 1;
+      padding: 0.65rem 0.5rem 0.8rem;
+      border: none;
+      background: transparent;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-soft);
+      cursor: pointer;
+      transition: color var(--t-fast);
+    }
+    .l-tab.is-active { color: var(--text-ink); }
+    .l-tabs::before {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: rgba(255,255,255,0.08);
+    }
+    .l-tabs::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0;
+      height: 2px; width: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px rgba(232,84,26,0.5);
+      transition: transform var(--t-normal);
+    }
+    .l-tabs.is-register::after { transform: translateX(100%); }
+
+    .l-form { display: none; animation: l-fade 0.25s ease both; }
+    .l-form.is-visible { display: block; }
+    @keyframes l-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .l-form__title {
+      margin: 0 0 4px;
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-ink);
+    }
+    .l-form__sub {
+      margin: 0 0 var(--s5);
+      font-size: 0.8rem;
+      color: var(--text-soft);
+    }
+
+    .l-field { margin-bottom: var(--s4); }
+    .l-field__label {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-soft);
+      margin-bottom: var(--s2);
+      transition: color var(--t-fast);
+    }
+    .l-field.is-focus .l-field__label { color: var(--accent); }
+    .l-input-wrap {
+      display: flex;
+      align-items: center;
+      border-radius: var(--r-md);
+      border: var(--border-strong);
+      background: var(--bg-input);
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+    }
+    .l-input-wrap.is-focus {
+      border-color: rgba(232,84,26,0.5);
+      box-shadow: 0 0 0 3px rgba(232,84,26,0.10);
+    }
+    .l-input-wrap.has-error {
+      border-color: rgba(246,70,93,0.55);
+      box-shadow: 0 0 0 3px rgba(246,70,93,0.08);
+    }
+    .l-input-icon {
+      width: 2.5rem;
+      text-align: center;
+      color: var(--text-ghost);
+      font-size: 0.82rem;
+      flex-shrink: 0;
+    }
+    .l-input-wrap.is-focus .l-input-icon { color: var(--accent); }
+    .l-input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.8rem 0.9rem 0.8rem 0;
+      border: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      color: var(--text-ink);
+      outline: none;
+    }
+    .l-input::placeholder { color: var(--text-ghost); }
+    .l-eye {
+      width: 2.6rem;
+      background: none;
+      border: none;
+      color: var(--text-ghost);
+      cursor: pointer;
+      font-size: 0.82rem;
+      flex-shrink: 0;
+    }
+    .l-eye:hover { color: var(--text-soft); }
+
+    .l-hint { font-size: 0.66rem; color: var(--text-ghost); margin-top: 5px; line-height: 1.4; }
+    .l-err {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: var(--red);
+      margin-top: 6px;
+    }
+    .l-err.is-visible { display: flex; }
+
+    /* Medidor de fortaleza */
+    .l-pw { margin-top: var(--s2); }
+    .l-pw__bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+    .l-pw__bar { height: 4px; border-radius: var(--r-full); background: rgba(255,255,255,0.10); transition: background var(--t-normal); }
+    .l-pw__bar.on-1 { background: var(--red); }
+    .l-pw__bar.on-2 { background: var(--amber); }
+    .l-pw__bar.on-3, .l-pw__bar.on-4 { background: var(--green); }
+    .l-pw__label { font-size: 0.64rem; font-family: var(--font-mono); color: var(--text-ghost); margin-top: 5px; }
+
+    /* Banner global */
+    .l-msg {
+      display: none;
+      align-items: flex-start;
+      gap: var(--s2);
+      padding: 0.7rem 0.85rem;
+      border-radius: var(--r-md);
+      font-size: 0.78rem;
+      line-height: 1.45;
+      margin-bottom: var(--s4);
+    }
+    .l-msg i { margin-top: 2px; flex-shrink: 0; }
+    .l-msg.is-visible { display: flex; }
+    .l-msg--error   { background: var(--red-pale);   color: var(--red); }
+    .l-msg--warning { background: var(--amber-pale); color: var(--amber); }
+    .l-msg--success { background: var(--green-pale); color: var(--green); }
+
+    /* Botón */
+    .l-submit {
+      width: 100%;
+      margin-top: var(--s2);
+      min-height: 52px;
+      padding: 0.85rem 1rem;
+      border: none;
+      border-radius: var(--r-md);
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--font-sans);
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--s2);
+      box-shadow: var(--shadow-accent);
+      transition: background var(--t-fast), box-shadow var(--t-fast);
+    }
+    .l-submit:hover:not(:disabled) { background: #F0632A; box-shadow: 0 0 30px rgba(232,84,26,0.42); }
+    .l-submit:active:not(:disabled) { background: var(--accent-warm); }
+    .l-submit:disabled { opacity: 0.85; cursor: progress; }
+    .l-submit.ok { background: var(--green); box-shadow: 0 0 26px rgba(14,203,129,0.4); }
+
+    .l-spinner {
+      display: none;
+      width: 17px; height: 17px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin-refresh 0.65s linear infinite;
+    }
+
+    .l-foot {
+      margin-top: var(--s5);
+      padding-top: var(--s4);
+      border-top: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--s3);
+      flex-wrap: wrap;
+    }
+    .l-foot__note { display: flex; align-items: center; gap: 6px; font-size: 0.68rem; color: var(--text-ghost); }
+    .l-foot__note i { color: var(--green); }
+    .l-back { font-size: 0.72rem; color: var(--text-soft); text-decoration: none; transition: color var(--t-fast); }
+    .l-back:hover { color: var(--accent); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="l-wrap">
+    <div class="l-stack">
+
+      <!-- Marca -->
+      <div>
+        <div class="l-brand">
+          <h1 class="l-brand__logo">DAYZO</h1>
+          <span class="l-dot" aria-hidden="true"></span>
+        </div>
+        <p class="l-tag">Tasas en vivo · Venezuela</p>
+      </div>
+
+      <!-- Tasas en vivo -->
+      <div>
+        <div class="l-rates" aria-label="Tasas en vivo">
+          <div class="l-rate">
+            <span class="l-rate__label"><span class="l-rate__dot l-rate__dot--green"></span> P2P Binance</span>
+            <div class="l-rate__val" id="login-binance">--</div>
+            <span class="l-rate__unit">Bs./USDT</span>
+          </div>
+          <div class="l-rate">
+            <span class="l-rate__label"><span class="l-rate__dot l-rate__dot--blue"></span> BCV</span>
+            <div class="l-rate__val" id="login-bcv">--</div>
+            <span class="l-rate__unit">Bs./USD</span>
+          </div>
+          <div class="l-rate l-rate--spread">
+            <span class="l-rate__label"><span class="l-rate__dot l-rate__dot--purple"></span> Brecha</span>
+            <div class="l-rate__val" id="login-spread">--</div>
+            <span class="l-rate__unit">%</span>
+          </div>
+        </div>
+        <div class="l-rates-foot" style="margin-top:var(--s2)">
+          <span>Variación 24h <b id="login-change">--</b></span>
+          <span id="login-updated">Conectando…</span>
+        </div>
+      </div>
+
+      <!-- Tarjeta de autenticación -->
+      <div class="l-card">
+        <div class="l-tabs" id="l-tabs" role="tablist">
+          <button class="l-tab is-active" id="tab-login"    role="tab" aria-selected="true"  type="button">Ingresar</button>
+          <button class="l-tab"           id="tab-register" role="tab" aria-selected="false" type="button">Crear cuenta</button>
+        </div>
+
+        <!-- LOGIN -->
+        <section class="l-form is-visible" id="form-login" role="tabpanel" aria-labelledby="tab-login">
+          <h2 class="l-form__title">Bienvenido de vuelta</h2>
+          <p class="l-form__sub">Accede a tus cotizaciones y herramientas.</p>
+
+          <div id="login-msg-error"   class="l-msg l-msg--error"   role="alert"><i class="fas fa-circle-exclamation"></i><span id="login-err-txt"></span></div>
+          <div id="login-msg-warning" class="l-msg l-msg--warning" role="alert"><i class="fas fa-clock"></i><span id="login-warn-txt"></span></div>
+
+          <form id="login-form" novalidate autocomplete="on">
+            <div class="l-field">
+              <label for="f-user" class="l-field__label">Usuario o correo</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-user"></i></span>
+                <input id="f-user" class="l-input" type="text" name="username"
+                  placeholder="usuario o correo@ejemplo.com" inputmode="email"
+                  autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+              </div>
+              <div class="l-err" id="f-user-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <div class="l-field">
+              <label for="f-pass" class="l-field__label">Contraseña</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-lock"></i></span>
+                <input id="f-pass" class="l-input" type="password" name="password"
+                  placeholder="••••••••" autocomplete="current-password" required>
+                <button type="button" class="l-eye" data-eye="f-pass" aria-label="Mostrar contraseña" tabindex="-1"><i class="fas fa-eye"></i></button>
+              </div>
+              <div class="l-err" id="f-pass-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <button type="submit" id="btn-login" class="l-submit">
+              <span class="l-spinner" id="login-spinner"></span>
+              <span id="login-btn-text">Entrar</span>
+              <i class="fas fa-arrow-right-to-bracket" id="login-btn-icon"></i>
+            </button>
+          </form>
+        </section>
+
+        <!-- REGISTRO -->
+        <section class="l-form" id="form-register" role="tabpanel" aria-labelledby="tab-register">
+          <h2 class="l-form__title">Crear tu cuenta</h2>
+          <p class="l-form__sub">Guarda cotizaciones de importación y accede desde cualquier lugar.</p>
+
+          <div id="reg-msg-error"   class="l-msg l-msg--error"   role="alert"><i class="fas fa-circle-exclamation"></i><span id="reg-err-txt"></span></div>
+          <div id="reg-msg-success" class="l-msg l-msg--success" role="alert"><i class="fas fa-circle-check"></i><span id="reg-ok-txt"></span></div>
+
+          <form id="register-form" novalidate autocomplete="on">
+            <div class="l-field">
+              <label for="r-name" class="l-field__label">Nombre completo</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-id-card"></i></span>
+                <input id="r-name" class="l-input" type="text" name="fullName"
+                  placeholder="Tu nombre completo" autocomplete="name" autocapitalize="words" required>
+              </div>
+              <div class="l-err" id="r-name-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <div class="l-field">
+              <label for="r-user" class="l-field__label">Nombre de usuario</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-at"></i></span>
+                <input id="r-user" class="l-input" type="text" name="username"
+                  placeholder="ej. juan_perez" autocomplete="username"
+                  autocapitalize="none" autocorrect="off" spellcheck="false" required>
+              </div>
+              <p class="l-hint">3–32 caracteres. Letras, números, punto, guion y guion bajo.</p>
+              <div class="l-err" id="r-user-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <div class="l-field">
+              <label for="r-email" class="l-field__label">Correo electrónico</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-envelope"></i></span>
+                <input id="r-email" class="l-input" type="email" name="email"
+                  placeholder="correo@ejemplo.com" inputmode="email"
+                  autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+              </div>
+              <div class="l-err" id="r-email-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <div class="l-field">
+              <label for="r-pass" class="l-field__label">Contraseña</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-lock"></i></span>
+                <input id="r-pass" class="l-input" type="password" name="password"
+                  placeholder="Mínimo 8 caracteres" autocomplete="new-password" required>
+                <button type="button" class="l-eye" data-eye="r-pass" aria-label="Mostrar contraseña" tabindex="-1"><i class="fas fa-eye"></i></button>
+              </div>
+              <div class="l-pw" id="pw-strength" hidden>
+                <div class="l-pw__bars">
+                  <span class="l-pw__bar" data-bar="1"></span>
+                  <span class="l-pw__bar" data-bar="2"></span>
+                  <span class="l-pw__bar" data-bar="3"></span>
+                  <span class="l-pw__bar" data-bar="4"></span>
+                </div>
+                <p class="l-pw__label" id="pw-label">—</p>
+              </div>
+              <div class="l-err" id="r-pass-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <div class="l-field">
+              <label for="r-pass2" class="l-field__label">Confirmar contraseña</label>
+              <div class="l-input-wrap">
+                <span class="l-input-icon"><i class="fas fa-lock"></i></span>
+                <input id="r-pass2" class="l-input" type="password" name="confirmPassword"
+                  placeholder="Repite tu contraseña" autocomplete="new-password" required>
+                <button type="button" class="l-eye" data-eye="r-pass2" aria-label="Mostrar contraseña" tabindex="-1"><i class="fas fa-eye"></i></button>
+              </div>
+              <div class="l-err" id="r-pass2-err"><i class="fas fa-triangle-exclamation"></i><span></span></div>
+            </div>
+            <button type="submit" id="btn-reg" class="l-submit">
+              <span class="l-spinner" id="reg-spinner"></span>
+              <span id="reg-btn-text">Crear cuenta</span>
+              <i class="fas fa-user-plus" id="reg-btn-icon"></i>
+            </button>
+          </form>
+        </section>
+
+        <div class="l-foot">
+          <span class="l-foot__note"><i class="fas fa-shield-halved"></i> Sesión cifrada en servidor</span>
+          <a class="l-back" href="/calculadoraa"><i class="fas fa-chart-line"></i> Ver tasas sin cuenta</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      const $ = (id) => document.getElementById(id);
+      const nf = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // ── Tasas en vivo ───────────────────────────────────────────────────
+      function flash(el) {
+        if (!el) return;
+        el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 500);
+      }
+      function setVal(id, text) {
+        const el = $(id);
+        if (!el) return;
+        const prev = el.textContent;
+        el.textContent = text;
+        if (prev !== '--' && prev !== text) flash(el);
+      }
+      async function loadRates() {
+        try {
+          const [tasasRes, statsRes] = await Promise.allSettled([
+            fetch('/api/tasas-venezuela?limit=1'),
+            fetch('/api/stats'),
+          ]);
+          if (tasasRes.status === 'fulfilled' && tasasRes.value.ok) {
+            const j = await tasasRes.value.json();
+            const t = j.tasas || {};
+            if (t.binance) setVal('login-binance', nf.format(t.binance));
+            if (t.bcv)     setVal('login-bcv', nf.format(t.bcv));
+            if (typeof j.diff_pct === 'number') setVal('login-spread', nf.format(j.diff_pct));
+            if (j.last_update) {
+              const parts = String(j.last_update).split(',');
+              $('login-updated').textContent = '● ' + (parts[1] ? parts[1].trim() : j.last_update);
+            }
+          }
+          if (statsRes.status === 'fulfilled' && statsRes.value.ok) {
+            const s = await statsRes.value.json();
+            const ch = s.binance?.changePct24h;
+            const el = $('login-change');
+            if (el && typeof ch === 'number') {
+              const up = ch >= 0;
+              el.textContent = (up ? '▲ +' : '▼ ') + nf.format(ch) + '%';
+              el.className = up ? 'l-up' : 'l-down';
+            }
+          }
+        } catch (_) { /* silencioso */ }
+      }
+      loadRates();
+      setInterval(loadRates, 30000);
+
+      // ── Tabs ────────────────────────────────────────────────────────────
+      const tabsWrap = $('l-tabs');
+      function switchTab(tab) {
+        ['login', 'register'].forEach((t) => {
+          const isOn = t === tab;
+          $('tab-' + t).classList.toggle('is-active', isOn);
+          $('tab-' + t).setAttribute('aria-selected', String(isOn));
+          $('form-' + t).classList.toggle('is-visible', isOn);
+        });
+        tabsWrap.classList.toggle('is-register', tab === 'register');
+        const focusId = tab === 'login' ? 'f-user' : 'r-name';
+        setTimeout(() => $(focusId)?.focus(), 60);
+      }
+      $('tab-login').addEventListener('click', () => switchTab('login'));
+      $('tab-register').addEventListener('click', () => switchTab('register'));
+      if (window.location.pathname === '/register') switchTab('register');
+
+      // ── Focus states ────────────────────────────────────────────────────
+      document.querySelectorAll('.l-input-wrap').forEach((wrap) => {
+        const input = wrap.querySelector('.l-input');
+        const field = wrap.closest('.l-field');
+        if (!input) return;
+        input.addEventListener('focus', () => { wrap.classList.add('is-focus'); field?.classList.add('is-focus'); });
+        input.addEventListener('blur',  () => { wrap.classList.remove('is-focus'); field?.classList.remove('is-focus'); });
+        input.addEventListener('input', () => {
+          wrap.classList.remove('has-error');
+          const err = field?.querySelector('.l-err');
+          if (err) err.classList.remove('is-visible');
+        });
+      });
+
+      // ── Eye toggles ─────────────────────────────────────────────────────
+      document.querySelectorAll('.l-eye').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const input = $(btn.dataset.eye);
+          const icon = btn.querySelector('i');
+          const show = input.type === 'password';
+          input.type = show ? 'text' : 'password';
+          icon.className = show ? 'fas fa-eye-slash' : 'fas fa-eye';
+        });
+      });
+
+      // ── Errores por campo ───────────────────────────────────────────────
+      function fieldError(fieldId, msg) {
+        const box = $(fieldId + '-err');
+        const input = $(fieldId);
+        if (box) { box.querySelector('span').textContent = msg; box.classList.add('is-visible'); }
+        if (input) { input.closest('.l-input-wrap')?.classList.add('has-error'); input.focus(); }
+      }
+
+      function clearBanner(ids) { ids.forEach((id) => $(id)?.classList.remove('is-visible')); }
+      function banner(boxId, txtId, text) { $(txtId).textContent = text; $(boxId).classList.add('is-visible'); }
+
+      function setLoading(btnId, spinnerId, iconId, textId, on, loadingText, idleText) {
+        $(btnId).disabled = on;
+        $(spinnerId).style.display = on ? 'block' : 'none';
+        $(iconId).style.display = on ? 'none' : '';
+        $(textId).textContent = on ? loadingText : idleText;
+      }
+
+      function getNextUrl() {
+        const raw = new URLSearchParams(window.location.search).get('next') || '';
+        return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/calculadoraa';
+      }
+
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const USER_RE = /^[a-zA-Z0-9._-]+$/;
+
+      // ── Medidor de fortaleza ────────────────────────────────────────────
+      function validatePassword(pwd) {
+        if (pwd.length < 8) return { valid: false, msg: 'Mínimo 8 caracteres' };
+        if (!/[a-zA-Z]/.test(pwd)) return { valid: false, msg: 'Debe incluir al menos una letra' };
+        if (!/[0-9]/.test(pwd)) return { valid: false, msg: 'Debe incluir al menos un número' };
+        const hasSpecial = /[^a-zA-Z0-9]/.test(pwd);
+        const hasUpper = /[A-Z]/.test(pwd);
+        const isLong = pwd.length >= 12;
+        const strength = (hasSpecial ? 1 : 0) + (hasUpper ? 1 : 0) + (isLong ? 1 : 0);
+        return { valid: true, strength };
+      }
+      const STRENGTH_LABELS = ['Débil', 'Aceptable', 'Buena', 'Fuerte'];
+      const rPass = $('r-pass');
+      rPass.addEventListener('input', () => {
+        const pwd = rPass.value;
+        const meter = $('pw-strength');
+        const bars = document.querySelectorAll('#pw-strength .l-pw__bar');
+        if (!pwd) { meter.hidden = true; return; }
+        meter.hidden = false;
+        const res = validatePassword(pwd);
+        let filled, cls, label;
+        if (!res.valid) { filled = 1; cls = 'on-1'; label = res.msg; }
+        else { filled = res.strength + 1; cls = 'on-' + filled; label = 'Contraseña ' + STRENGTH_LABELS[res.strength].toLowerCase(); }
+        bars.forEach((b, i) => { b.className = 'l-pw__bar' + (i < filled ? ' ' + cls : ''); });
+        $('pw-label').textContent = label;
+      });
+
+      // ── LOGIN ───────────────────────────────────────────────────────────
+      $('login-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearBanner(['login-msg-error', 'login-msg-warning']);
+        const username = $('f-user').value.trim();
+        const password = $('f-pass').value;
+        if (!username) return fieldError('f-user', 'Ingresa tu usuario o correo.');
+        if (!password) return fieldError('f-pass', 'Ingresa tu contraseña.');
+
+        setLoading('btn-login', 'login-spinner', 'login-btn-icon', 'login-btn-text', true, 'Verificando…', 'Entrar');
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            const btn = $('btn-login');
+            btn.classList.add('ok');
+            $('login-btn-text').textContent = 'Acceso concedido';
+            $('login-btn-icon').className = 'fas fa-check';
+            $('login-spinner').style.display = 'none';
+            $('login-btn-icon').style.display = '';
+            setTimeout(() => window.location.replace(getNextUrl()), 380);
+            return;
+          }
+          if (res.status === 429) banner('login-msg-warning', 'login-warn-txt', data?.error || 'Demasiados intentos. Espera 15 minutos.');
+          else {
+            banner('login-msg-error', 'login-err-txt', data?.error || 'Usuario o contraseña incorrectos.');
+            $('f-pass').value = ''; $('f-pass').focus();
+          }
+        } catch (_) {
+          banner('login-msg-error', 'login-err-txt', 'Sin conexión con el servidor. Verifica tu red.');
+        } finally {
+          if ($('btn-login').disabled && !$('btn-login').classList.contains('ok')) {
+            setLoading('btn-login', 'login-spinner', 'login-btn-icon', 'login-btn-text', false, '', 'Entrar');
+          }
+        }
+      });
+
+      // ── REGISTRO ────────────────────────────────────────────────────────
+      $('register-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearBanner(['reg-msg-error', 'reg-msg-success']);
+        const fullName = $('r-name').value.trim();
+        const username = $('r-user').value.trim();
+        const email    = $('r-email').value.trim().toLowerCase();
+        const password = $('r-pass').value;
+        const confirm  = $('r-pass2').value;
+
+        if (!fullName || fullName.length < 2) return fieldError('r-name', 'Ingresa tu nombre completo.');
+        if (!username || username.length < 3) return fieldError('r-user', 'Mínimo 3 caracteres.');
+        if (!USER_RE.test(username)) return fieldError('r-user', 'Solo letras, números, punto, guion y guion bajo.');
+        if (EMAIL_RE.test(username)) return fieldError('r-user', 'El usuario no puede ser un correo.');
+        if (!EMAIL_RE.test(email)) return fieldError('r-email', 'Correo electrónico no válido.');
+        const pw = validatePassword(password);
+        if (!pw.valid) return fieldError('r-pass', pw.msg);
+        if (password !== confirm) return fieldError('r-pass2', 'Las contraseñas no coinciden.');
+
+        setLoading('btn-reg', 'reg-spinner', 'reg-btn-icon', 'reg-btn-text', true, 'Registrando…', 'Crear cuenta');
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullName, username, email, password }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            banner('reg-msg-success', 'reg-ok-txt', data.message || 'Cuenta creada. Ya puedes iniciar sesión.');
+            $('register-form').reset();
+            $('pw-strength').hidden = true;
+            setTimeout(() => switchTab('login'), 1800);
+            return;
+          }
+          if (res.status === 429) banner('reg-msg-error', 'reg-err-txt', data?.error || 'Demasiados intentos. Espera 15 minutos.');
+          else banner('reg-msg-error', 'reg-err-txt', data?.error || 'No se pudo crear la cuenta.');
+        } catch (_) {
+          banner('reg-msg-error', 'reg-err-txt', 'Sin conexión con el servidor. Verifica tu red.');
+        } finally {
+          if ($('btn-reg').disabled) setLoading('btn-reg', 'reg-spinner', 'reg-btn-icon', 'reg-btn-text', false, '', 'Crear cuenta');
+        }
+      });
+
+      setTimeout(() => $('f-user')?.focus(), 120);
+    })();
+  </script>
+</body>
+</html>

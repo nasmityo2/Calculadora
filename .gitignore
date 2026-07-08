@@ -1,0 +1,27 @@
+# Dependencias
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Entorno
+.env
+.env.local
+
+# Datos en runtime (SQLite WAL; el .db grande suele no versionarse)
+data/historial.db
+data/historial.db-shm
+data/historial.db-wal
+
+# Opcional: no versionar cotizaciones ni dumps JSON en data/
+# data/import_cotizaciones.json
+# data/historial_tasas.json
+# data/*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.cursor/

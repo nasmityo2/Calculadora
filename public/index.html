@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Calc Pro</title>
+  <meta name="description" content="Tasas Binance, BCV y CNY en vivo, calculadora y costos de importación.">
+  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2534/2534204.png" type="image/png">
+  <link rel="preload" href="/styles.css?v=20260702" as="style">
+  <link rel="preload" href="/app.js" as="script">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0B0E11">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2534/2534204.png">
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="stylesheet" href="/styles.css?v=20260702">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+  <div id="app-root" class="c-app-root">
+  <!-- TOPBAR -->
+  <header class="c-topbar">
+    <div class="c-topbar__brand">
+      <h1 class="c-topbar__logo">DAYZO<span></span></h1>
+    </div>
+    <div class="c-topbar__center">
+      <!-- TICKER: contenedor con overflow hidden, inner duplicado para loop -->
+      <div class="c-ticker" aria-label="Tasas en vivo" role="marquee">
+        <div class="c-ticker__track">
+          <div class="c-ticker__inner" id="ticker-inner">
+            <!-- JS llenará esto, o poner los 4 items estáticos con IDs espejo -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="c-topbar__actions">
+      <div id="topbar-user" class="c-topbar__user"></div>
+      <span id="current-rates-time" class="c-topbar__time">--:--</span>
+      <button id="btn-refresh" onclick="refreshManual()" class="c-topbar__refresh" aria-label="Actualizar">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+      <nav class="c-topbar__nav">
+        <button id="nav-divisas" onclick="switchView('divisas')" class="c-nav-tab tab-active">Divisas</button>
+        <button id="nav-import"  onclick="switchView('import')"  class="c-nav-tab text-slate-400">Importación</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="c-main">
+
+    <!-- ── VISTA DIVISAS ── -->
+    <div id="view-divisas" class="c-view">
+
+      <!-- Rate cards 2x2 -->
+      <section class="c-rate-grid c-rate-cards c-stagger-1" aria-label="Tasas actuales">
+        <article class="c-rate-card c-rate-card--buy">
+          <header class="c-rate-card__head">
+            <span class="c-rate-card__dot c-rate-card__dot--green"></span>
+            <span class="c-rate-card__label">Binance · Comprar</span>
+          </header>
+          <div class="c-rate-card__body">
+            <div class="c-rate-val-slot">
+              <div class="c-skeleton c-rate-skel"></div>
+              <p id="t-binance" class="c-rate-card__value">--</p>
+            </div>
+            <span class="c-rate-card__currency">VES</span>
+          </div>
+          <p id="delta-binance" class="c-rate-card__delta" aria-live="polite"></p>
+        </article>
+        <article class="c-rate-card c-rate-card--sell">
+          <header class="c-rate-card__head">
+            <span class="c-rate-card__dot c-rate-card__dot--red"></span>
+            <span class="c-rate-card__label">Binance · Vender</span>
+          </header>
+          <div class="c-rate-card__body">
+            <div class="c-rate-val-slot">
+              <div class="c-skeleton c-rate-skel"></div>
+              <p id="t-binance-compra" class="c-rate-card__value">--</p>
+            </div>
+            <span class="c-rate-card__currency">VES</span>
+          </div>
+          <p class="c-rate-card__delta" aria-hidden="true"></p>
+        </article>
+        <article class="c-rate-card c-rate-card--bcv">
+          <header class="c-rate-card__head">
+            <span class="c-rate-card__dot c-rate-card__dot--blue"></span>
+            <span class="c-rate-card__label">BCV · Vigente</span>
+            <time id="bcv-vigencia-nota" class="c-rate-card__head-date" datetime="" hidden></time>
+          </header>
+          <div class="c-rate-card__body">
+            <div class="c-rate-val-slot">
+              <div class="c-skeleton c-rate-skel"></div>
+              <p id="t-bcv" class="c-rate-card__value">--</p>
+            </div>
+            <span class="c-rate-card__currency">VES</span>
+          </div>
+          <p id="delta-bcv" class="c-rate-card__delta" aria-live="polite"></p>
+        </article>
+        <article class="c-rate-card c-rate-card--cny">
+          <header class="c-rate-card__head">
+            <span class="c-rate-card__dot c-rate-card__dot--amber"></span>
+            <span class="c-rate-card__label">CNY · USD</span>
+          </header>
+          <div class="c-rate-card__body">
+            <div class="c-rate-val-slot">
+              <div class="c-skeleton c-rate-skel"></div>
+              <p id="t-cny" class="c-rate-card__value">--</p>
+            </div>
+            <span class="c-rate-card__currency">¥/$</span>
+          </div>
+          <p class="c-rate-card__delta" aria-hidden="true"></p>
+        </article>
+      </section>
+
+      <!-- Grid 2 columnas desktop -->
+      <div class="c-divisas-grid">
+
+        <!-- Columna izquierda -->
+        <div class="c-divisas-left c-stagger-2">
+
+          <!-- Calculadora -->
+          <section class="c-calc-card" aria-label="Calculadora">
+            <!-- Tabs modo -->
+            <div class="c-calc-tabs" role="tablist">
+              <button id="b-VES"  onclick="setM('VES')"  role="tab" class="c-calc-tab tab-active">VES</button>
+              <button id="b-USDT" onclick="setM('USDT')" role="tab" class="c-calc-tab text-slate-400">USDT</button>
+              <button id="b-BCV"  onclick="setM('BCV')"  role="tab" class="c-calc-tab text-slate-400">BCV</button>
+              <button id="b-CNY"  onclick="setM('CNY')"  role="tab" class="c-calc-tab text-slate-400">CNY</button>
+            </div>
+            <!-- Tasas históricas: calcular con las tasas guardadas de otra fecha -->
+            <div class="c-hist-bar">
+              <button type="button" id="hist-toggle-btn" class="c-hist-toggle" onclick="toggleHistPanel()" aria-expanded="false" aria-controls="hist-controls">
+                <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
+                <span>Calcular con tasa de otra fecha</span>
+                <i class="fas fa-chevron-down c-hist-toggle__chev" aria-hidden="true"></i>
+              </button>
+              <div id="hist-controls" class="c-hist-controls" hidden>
+                <input type="date" id="hist-date" class="c-hist-input" aria-label="Fecha de la tasa histórica">
+                <input type="time" id="hist-time" class="c-hist-input" aria-label="Hora (opcional)" title="Hora (opcional) — sin hora se usa el cierre del día">
+                <button type="button" id="hist-apply-btn" class="c-hist-apply" onclick="aplicarTasaHistorica()">
+                  <i class="fas fa-magnifying-glass" aria-hidden="true"></i> Aplicar
+                </button>
+              </div>
+              <div id="hist-banner" class="c-hist-banner" hidden aria-live="polite"></div>
+            </div>
+            <!-- Input flotante -->
+            <div class="c-calc-input-wrap">
+              <label id="l-input" class="c-calc-label" for="monto">Monto en Bolívares</label>
+              <div class="c-calc-field">
+                <input type="text" inputmode="decimal" id="monto" class="c-calc-field__input"
+                  placeholder="Ej: 1.234.567,89" oninput="calc()" autocomplete="off" spellcheck="false">
+                <span id="s-input" class="c-calc-field__suffix">Bs</span>
+                <button onclick="clearInput()" class="c-calc-field__clear" aria-label="Borrar">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+            <!-- Resultados -->
+            <div class="c-calc-results">
+              <div class="c-result-row c-result-row--green">
+                <div class="c-result-row__left">
+                  <span class="c-result-row__icon" style="color:var(--green)"><i class="fas fa-exchange-alt"></i></span>
+                  <p id="res1-l" class="c-result-row__label">USDT (P2P)</p>
+                </div>
+                <div class="c-result-row__right">
+                  <p id="res1-v" class="c-result-row__value">0,00</p>
+                  <button onclick="copyToClipboard('res1-v')" class="c-copy-btn" aria-label="Copiar">
+                    <i class="far fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="c-result-row c-result-row--blue">
+                <div class="c-result-row__left">
+                  <span class="c-result-row__icon" style="color:var(--blue)"><i class="fas fa-university"></i></span>
+                  <p id="res2-l" class="c-result-row__label">Dólar BCV</p>
+                </div>
+                <div class="c-result-row__right">
+                  <p id="res2-v" class="c-result-row__value">0,00</p>
+                  <button onclick="copyToClipboard('res2-v')" class="c-copy-btn" aria-label="Copiar">
+                    <i class="far fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="c-result-row c-result-row--amber">
+                <div class="c-result-row__left">
+                  <span class="c-result-row__icon" style="color:var(--amber)"><i class="fas fa-globe-asia"></i></span>
+                  <p id="res3-l" class="c-result-row__label">Yuanes</p>
+                </div>
+                <div class="c-result-row__right">
+                  <p id="res3-v" class="c-result-row__value">0,00</p>
+                  <button onclick="copyToClipboard('res3-v')" class="c-copy-btn" aria-label="Copiar">
+                    <i class="far fa-copy"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Brecha -->
+          <div class="c-brecha c-stagger-3">
+            <span class="c-brecha__label">Brecha P2P vs BCV</span>
+            <p id="b-pct" class="c-brecha__value">0,00%</p>
+          </div>
+
+          <button type="button" id="btn-share-rates" class="c-share-btn c-stagger-3" onclick="shareRatesImage()">
+            <i class="fas fa-share-nodes"></i> Compartir tasas
+          </button>
+        </div>
+
+        <!-- Columna derecha -->
+        <div class="c-divisas-right c-stagger-3">
+          <!-- Chart -->
+          <section class="c-chart-card" aria-labelledby="chart-heading">
+            <header class="c-chart-card__head">
+              <h2 id="chart-heading" class="c-chart-card__title">Tendencia</h2>
+              <div class="c-chart-ranges">
+                <button id="cf-24h" onclick="setChartRange('24h')" class="chart-filter c-range-btn text-white bg-white/15">24H</button>
+                <button id="cf-7d"  onclick="setChartRange('7d')"  class="chart-filter c-range-btn text-slate-400">7D</button>
+                <button type="button" onclick="setChartRange('month')" id="cf-month"
+                  class="chart-filter c-range-btn text-slate-400">MES</button>
+                <button id="cf-all" onclick="setChartRange('all')" class="chart-filter c-range-btn text-slate-400">TODO</button>
+              </div>
+            </header>
+            <div class="c-chart-stats">
+              <div class="c-stat"><span class="c-stat__label">Máx</span><span id="stat-max" class="c-stat__val c-stat__val--green">--</span></div>
+              <div class="c-stat"><span class="c-stat__label">Prom</span><span id="stat-avg" class="c-stat__val c-stat__val--blue">--</span></div>
+              <div class="c-stat"><span class="c-stat__label">Mín</span><span id="stat-min" class="c-stat__val c-stat__val--red">--</span></div>
+            </div>
+            <div class="c-chart-canvas-wrap">
+              <canvas id="mainChart"></canvas>
+            </div>
+            <div class="c-chart-legend">
+              <button onclick="toggleDataset(0)" id="legend-binance" class="c-legend-btn c-legend-btn--green">
+                <span class="c-legend-dot"></span> Comprar
+              </button>
+              <button onclick="toggleDataset(1)" id="legend-compra" class="c-legend-btn c-legend-btn--red">
+                <span class="c-legend-dot"></span> Vender
+              </button>
+              <button onclick="toggleDataset(2)" id="legend-bcv" class="c-legend-btn c-legend-btn--blue">
+                <span class="c-legend-dot"></span> BCV
+              </button>
+            </div>
+          </section>
+
+          <!-- Historial -->
+          <section class="c-historial-card c-stagger-4" aria-label="Historial">
+            <header class="c-historial-card__head">
+              <h2 class="c-historial-card__title"><i class="fas fa-history"></i> Historial</h2>
+              <span id="last-update" class="c-historial-card__time">--:--</span>
+            </header>
+            <div class="c-historial-card__filters">
+              <input type="date" id="filter-date" class="c-filter-input" onchange="searchHistoryByDate()" aria-label="Filtrar por fecha">
+              <input type="time" id="filter-time" class="c-filter-input" onchange="renderHistorial()" aria-label="Filtrar por hora">
+            </div>
+            <div id="h-lista" class="c-historial-card__list"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── VISTA IMPORTACIÓN ── -->
+    <div id="view-import" class="c-view hidden-view">
+      <div class="c-import-grid">
+
+        <!-- Columna izq: config + cotizaciones -->
+        <div class="c-import-left">
+          <section class="c-import-card c-stagger-1" aria-label="Importación">
+            <h2 class="c-import-card__title"><i class="fas fa-shipping-fast"></i> Costo de Importación</h2>
+
+            <!-- Empresas -->
+            <div class="c-empresas-section">
+              <p class="c-field-label">Empresa de envío</p>
+              <div class="c-empresas-grid">
+                <button id="btn-emp-770"  onclick="setEmpresa(770)"      class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
+                  <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide">GCCARGO</span>
+                  <span class="c-empresa-btn__price block text-sm text-emerald-400 font-bold mt-0.5">$770</span>
+                </button>
+                <button id="btn-emp-865"  onclick="setEmpresa(865)"      class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
+                  <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide">Orinoco</span>
+                  <span class="c-empresa-btn__price block text-sm text-emerald-400 font-bold mt-0.5">$865</span>
+                </button>
+                <button id="btn-emp-1030" onclick="setEmpresa(1030)"     class="empresa-btn c-empresa-btn px-2 py-3 bg-indigo-600 border border-indigo-400 rounded-xl">
+                  <span class="c-empresa-btn__name block text-xs font-bold text-white uppercase tracking-wide">import2ven</span>
+                  <span class="c-empresa-btn__price block text-sm text-indigo-100 font-bold mt-0.5">$1030</span>
+                </button>
+                <div  id="btn-emp-custom" onclick="setEmpresa('custom')" class="empresa-btn c-empresa-btn c-empresa-btn--custom px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 flex flex-col items-center justify-center" role="button" tabindex="0">
+                  <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1">Personalizado</span>
+                  <div class="flex items-center gap-1">
+                    <span id="custom-rate-prefix" class="text-emerald-400 font-bold text-sm">$</span>
+                    <input type="number" id="custom-rate" inputmode="decimal" placeholder="0"
+                      class="w-16 bg-transparent border-b border-slate-600 text-center text-emerald-400 font-bold text-sm focus:outline-none focus:border-emerald-400"
+                      oninput="updateCustomRate(this.value); event.stopPropagation();"
+                      onclick="event.stopPropagation()">
+                  </div>
+                </div>
+              </div>
+              <details class="c-empresas-compare">
+                <summary>¿Cómo cobra cada empresa?</summary>
+                <ul class="c-empresas-compare__list">
+                  <li><strong>GCCARGO ($770)</strong> — Por volumen puro. Sin mínimo.</li>
+                  <li><strong>Orinoco ($865)</strong> — Por volumen. Mínimo $35/caja si el volumen es menor a 0.035 m³.</li>
+                  <li><strong>import2ven ($1030)</strong> — Por densidad: peso si den&gt;1000; volumen +$50 si 380–1000; volumen puro si den&lt;380.</li>
+                </ul>
+              </details>
+            </div>
+
+            <!-- Entrada (modo guiado / rápido) -->
+            <div class="c-import-input-section">
+              <div class="c-import-mode-toggle" role="tablist" aria-label="Modo de entrada">
+                <button type="button" id="btn-imp-mode-guided" class="c-imp-mode-btn is-active" onclick="setImportInputMode('guided')" role="tab"><i class="fas fa-list-check"></i> Guiado</button>
+                <button type="button" id="btn-imp-mode-quick"  class="c-imp-mode-btn"           onclick="setImportInputMode('quick')"  role="tab"><i class="fas fa-bolt"></i> Rápido</button>
+              </div>
+
+              <!-- Modo guiado: campos separados -->
+              <div id="imp-guided" class="c-imp-guided">
+                <label class="c-field-label">Dimensiones (cm)</label>
+                <div class="c-imp-dims">
+                  <input type="number" inputmode="decimal" id="g-largo" class="c-imp-gfield" placeholder="Largo" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  <span class="c-imp-dims-x" aria-hidden="true">×</span>
+                  <input type="number" inputmode="decimal" id="g-ancho" class="c-imp-gfield" placeholder="Ancho" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  <span class="c-imp-dims-x" aria-hidden="true">×</span>
+                  <input type="number" inputmode="decimal" id="g-alto" class="c-imp-gfield" placeholder="Alto" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                </div>
+                <div class="c-imp-gfields-grid">
+                  <div class="c-imp-gfield-wrap">
+                    <label class="c-field-label" for="g-peso">Peso por caja (kg)</label>
+                    <input type="number" inputmode="decimal" id="g-peso" class="c-imp-gfield" placeholder="0" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  </div>
+                  <div class="c-imp-gfield-wrap">
+                    <label class="c-field-label" for="g-unid">Unidades por caja</label>
+                    <input type="number" inputmode="numeric" id="g-unid" class="c-imp-gfield" placeholder="0" min="0" step="1" oninput="onGuidedImportInput()" autocomplete="off">
+                  </div>
+                  <div class="c-imp-gfield-wrap">
+                    <label class="c-field-label" for="g-precio">Precio unidad (CNY)</label>
+                    <input type="number" inputmode="decimal" id="g-precio" class="c-imp-gfield" placeholder="0" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  </div>
+                  <div class="c-imp-gfield-wrap">
+                    <label class="c-field-label" for="g-envio">Envío China (USD/caja)</label>
+                    <input type="number" inputmode="decimal" id="g-envio" class="c-imp-gfield" placeholder="0 (opcional)" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  </div>
+                  <div class="c-imp-gfield-wrap">
+                    <label class="c-field-label" for="g-cajas">Núm. de cajas</label>
+                    <input type="number" inputmode="numeric" id="g-cajas" class="c-imp-gfield" placeholder="1" min="1" step="1" oninput="onGuidedImportInput()" autocomplete="off">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Modo rápido: una sola línea -->
+              <div id="imp-quick" class="c-imp-quick hidden">
+                <label class="c-field-label" for="imp-data">Datos de entrada</label>
+                <input type="text" id="imp-data" class="c-import-input"
+                  placeholder="Ej: 30x30x30 15 50 4.5"
+                  oninput="onQuickImportInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <p class="c-import-hint">Formato: <strong>LxAxA · Peso · Unidades · Precio CNY</strong> · [Envío] · [Cajas]</p>
+              </div>
+            </div>
+
+            <!-- Comisiones -->
+            <div class="c-fees-section">
+              <p class="c-field-label">Comisiones</p>
+              <div class="c-fees-grid">
+                <div class="c-fee-item">
+                  <span class="c-fee-item__label">Plataforma (%)</span>
+                  <input type="number" id="imp-fee-plat-input" class="c-fee-item__input" step="0.01" min="0" value="3" oninput="onEditarComisionesImport()" inputmode="decimal">
+                </div>
+                <div class="c-fee-item">
+                  <span class="c-fee-item__label">Banco (%)</span>
+                  <input type="number" id="imp-fee-banco-input" class="c-fee-item__input" step="0.01" min="0" value="1.25" oninput="onEditarComisionesImport()" inputmode="decimal">
+                </div>
+              </div>
+            </div>
+
+            <!-- Resultados importación -->
+            <div id="imp-results" class="c-imp-results opacity-50 transition-all duration-300">
+              <div class="c-imp-summary">
+                <div class="c-imp-kv"><span class="c-imp-kv__label">Volumen</span><span id="imp-vol" class="c-imp-kv__val">0.000 m³</span></div>
+                <div class="c-imp-kv"><span class="c-imp-kv__label">Peso</span><span id="imp-peso" class="c-imp-kv__val">0.00 kg</span></div>
+                <div class="c-imp-kv"><span class="c-imp-kv__label">Tipo</span><span id="imp-tipo" class="c-imp-kv__val c-imp-kv__val--purple">--</span></div>
+              </div>
+              <div id="imp-tarifa-min-note" class="c-imp-note" style="display:none;" role="status">
+                <i class="fas fa-circle-info" aria-hidden="true"></i><span>Tarifa mínima aplicada</span>
+              </div>
+              <div class="c-imp-breakdown">
+                <div class="c-imp-line"><span class="c-imp-line__label"><i class="fas fa-box-open"></i> Mercancía</span><span id="imp-mercancia" class="c-imp-line__val">$0.00</span></div>
+                <div class="c-imp-line" id="row-envio-china" style="display:none;"><span class="c-imp-line__label"><i class="fas fa-truck"></i> Envío China</span><span id="imp-envio-china" class="c-imp-line__val c-imp-line__val--amber">+$0.00</span></div>
+                <div class="c-imp-separator"></div>
+                <div class="c-imp-line c-imp-line--sub"><span class="c-imp-line__label">Plataforma (<span id="imp-fee-plat-pct">3.00</span>%)</span><span id="imp-fee-plat" class="c-imp-line__val c-imp-line__val--red">+$0.00</span></div>
+                <div class="c-imp-line c-imp-line--sub"><span class="c-imp-line__label">Banco (<span id="imp-fee-banco-pct">1.25</span>%)</span><span id="imp-fee-banco" class="c-imp-line__val c-imp-line__val--red">+$0.00</span></div>
+                <div class="c-imp-subtotal-line"><span>Subtotal</span><span id="imp-subtotal" class="c-imp-subtotal-val">$0.00</span></div>
+                <div class="c-imp-line"><span class="c-imp-line__label"><i class="fas fa-plane"></i> Envío internacional</span><span id="imp-flete" class="c-imp-line__val c-imp-line__val--purple">+$0.00</span></div>
+                <div class="c-imp-total-line"><span>Inversión total</span><span id="imp-total" class="c-imp-total-val">$0.00</span></div>
+              </div>
+              <div class="c-imp-footer-cards">
+                <div class="c-imp-footer-card">
+                  <p class="c-imp-footer-card__label">Costo unitario</p>
+                  <p id="imp-unitario" class="c-imp-footer-card__val">$0.00</p>
+                  <p id="imp-unitario-bcv" class="c-imp-footer-card__cross">$0.00 (BCV)</p>
+                  <p id="imp-unitario-cny" class="c-imp-footer-card__cross">¥0.00</p>
+                </div>
+                <div class="c-imp-footer-card"><p class="c-imp-footer-card__label">Costo por caja</p><p id="imp-caja" class="c-imp-footer-card__val">$0.00</p></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Cotizaciones guardadas -->
+          <section class="c-quotes-card c-stagger-2" aria-label="Cotizaciones guardadas">
+            <div class="c-quotes-card__head">
+              <h3 class="c-quotes-card__title"><i class="fas fa-folder-open"></i> Cotizaciones</h3>
+              <div class="c-quotes-card__meta">
+                <span id="import-quotes-count" class="c-quotes-count">0</span>
+                <select id="import-quotes-company-filter" onchange="renderImportQuotesList()" class="c-quotes-filter" aria-label="Filtrar por empresa">
+                  <option value="ALL">Todas</option>
+                </select>
+                <select id="import-quotes-sort" onchange="renderImportQuotesList()" class="c-quotes-filter" aria-label="Ordenar">
+                  <option value="recent">Más reciente</option>
+                  <option value="inversion">Mayor inversión</option>
+                  <option value="empresa">Empresa</option>
+                  <option value="nombre">Nombre</option>
+                </select>
+              </div>
+            </div>
+            <div class="c-quotes-search">
+              <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+              <input type="search" id="import-quotes-search" class="c-quotes-search__input" placeholder="Buscar por nombre…" oninput="renderImportQuotesList()" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar cotización">
+            </div>
+            <div class="c-quotes-save-row">
+              <div class="c-quotes-save-fields c-auth-only">
+                <input type="text" id="import-quote-name" class="c-quotes-name-input" placeholder="Nombre de la cotización" aria-label="Nombre" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false">
+                <input type="url" id="import-quote-product-link" class="c-quotes-link-input" placeholder="Link del producto (opcional)" aria-label="Link del producto" inputmode="url" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <input type="number" id="import-quote-sale-price" class="c-quotes-link-input" placeholder="Precio de venta por unidad (opcional, USD)" aria-label="Precio de venta por unidad" inputmode="decimal" min="0" step="any" autocomplete="off">
+              </div>
+              <button onclick="guardarCotizacionImport()" class="c-quotes-save-btn c-auth-only" aria-label="Guardar">
+                <i class="fas fa-save"></i> Guardar
+              </button>
+            </div>
+
+            <div id="import-quotes-list" class="c-quotes-list"></div>
+
+            <!-- Panel edición / vista detallada (después de la lista; las filas también muestran resumen expandido) -->
+            <div id="import-quotes-detail" class="c-quote-detail c-quote-detail--panel hidden">
+              <div class="c-quote-detail__top">
+                <div>
+                  <div id="import-quote-detail-title" class="c-quote-detail__title">-</div>
+                  <div id="import-quote-detail-date" class="c-quote-detail__date">-</div>
+                </div>
+                <button onclick="cerrarDetalleCotizacionImport()" class="c-quote-detail__close" aria-label="Cerrar">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+              <div class="c-quote-detail__metrics">
+                <div class="c-quote-detail__row"><span>Dimensiones</span><strong id="import-q-dims">-</strong></div>
+                <div class="c-quote-detail__row"><span>Unidades</span><strong id="import-q-unidades">-</strong></div>
+                <div class="c-quote-detail__row"><span>Costo / unidad</span><strong id="import-q-costo-unidad" style="color:var(--green)">-</strong></div>
+                <div id="import-row-producto-link" class="c-quote-detail__row c-quote-detail__row--link hidden"><span>Producto</span><strong><a id="import-q-producto-link" href="#" target="_blank" rel="noopener noreferrer" class="c-producto-link">-</a></strong></div>
+              </div>
+              <div class="c-quote-detail__actions">
+                <button id="import-btn-edit"   onclick="editarCotizacionImport()"   class="c-quote-detail__btn-edit c-auth-only"><i class="fas fa-pen"></i> Editar</button>
+                <button id="import-btn-delete" onclick="eliminarCotizacionImport()" class="c-quote-detail__btn-delete c-auth-only"><i class="fas fa-trash"></i> Eliminar</button>
+              </div>
+              <!-- Edit controls -->
+              <div id="import-quote-edit-controls" class="c-quote-edit hidden">
+                <p class="c-quote-edit__hint">Cambia empresa para recalcular envío.</p>
+                <input type="text" id="import-quote-edit-name" class="c-quote-edit__name" placeholder="Nombre base">
+                <input type="url" id="import-quote-edit-product-link" class="c-quote-edit__link" placeholder="Link del producto (opcional)" inputmode="url" autocomplete="off" aria-label="Link del producto">
+                <input type="number" id="import-quote-edit-sale-price" class="c-quote-edit__link" placeholder="Precio de venta por unidad (opcional, USD)" inputmode="decimal" min="0" step="any" autocomplete="off" aria-label="Precio de venta por unidad" oninput="onEmpresaEdicionChange()">
+                <div class="c-quote-edit__company-row">
+                  <label for="import-quote-edit-company" class="c-field-label" style="margin:0">Empresa</label>
+                  <select id="import-quote-edit-company" onchange="onEmpresaEdicionChange()" class="c-quote-edit__select">
+                    <option value="770">GCCARGO (770)</option>
+                    <option value="865">Orinoco (865)</option>
+                    <option value="1030">import2ven (1030)</option>
+                    <option value="custom">Personalizado</option>
+                  </select>
+                </div>
+                <div id="import-quote-edit-custom-wrap" class="c-quote-edit__custom-wrap hidden">
+                  <span class="c-field-label" style="margin:0">Tarifa USD</span>
+                  <input type="number" inputmode="decimal" id="import-quote-edit-custom-rate" class="c-quote-edit__custom-input" placeholder="Tarifa">
+                </div>
+                <p class="c-quote-edit__hint">Entrada: <span id="import-quote-edit-entrada" class="c-quote-edit__entrada">-</span></p>
+                <div class="c-quote-edit__btns">
+                  <button onclick="actualizarCotizacionImport()"       class="c-quote-edit__save c-auth-only">   <i class="fas fa-check"></i> Actualizar</button>
+                  <button onclick="cancelarEdicionCotizacionImport()"  class="c-quote-edit__cancel">Cancelar</button>
+                </div>
+              </div>
+              <!-- Desglose detalle -->
+              <div class="c-quote-detail__breakdown">
+                <div class="c-quote-detail__row"><span>Volumen</span><strong id="import-q-vol">-</strong></div>
+                <div class="c-quote-detail__row"><span>Peso</span><strong id="import-q-peso">-</strong></div>
+                <div class="c-quote-detail__row"><span>Tipo cobro</span><strong id="import-q-tipo">-</strong></div>
+                <div class="c-quote-detail__row"><span>Mercancía</span><strong id="import-q-merc">-</strong></div>
+                <div class="c-quote-detail__row" id="import-row-envio-china" style="display:none;"><span>Envío China</span><strong id="import-q-envio-china">-</strong></div>
+                <div class="c-quote-detail__row"><span>Plataforma (<span id="import-q-plat-pct">3.00</span>%)</span><strong id="import-q-plat">-</strong></div>
+                <div class="c-quote-detail__row"><span>Banco (<span id="import-q-banco-pct">1.25</span>%)</span><strong id="import-q-banco">-</strong></div>
+                <div class="c-quote-detail__row c-quote-detail__row--subtotal"><span>Subtotal</span><strong id="import-q-subtotal">-</strong></div>
+                <div class="c-quote-detail__row"><span>Envío internacional</span><strong id="import-q-flete">-</strong></div>
+                <div class="c-quote-detail__row c-quote-detail__row--total"><span>Inversión total</span><strong id="import-q-total">-</strong></div>
+              </div>
+              <div id="import-row-precio-inicial" class="c-imp-footer-cards" style="margin-top:var(--s3);display:none">
+                <div class="c-imp-footer-card" style="border-color:rgba(240,185,11,0.25)">
+                  <p class="c-imp-footer-card__label">Precio compra/un.</p>
+                  <p id="import-q-precio-inicial-usd" class="c-imp-footer-card__val" style="color:var(--amber)">$0.00</p>
+                  <p id="import-q-precio-inicial-bcv" class="c-imp-footer-card__cross">-- (BCV)</p>
+                  <p id="import-q-precio-inicial-cny" class="c-imp-footer-card__cross">¥0.00</p>
+                </div>
+              </div>
+              <div class="c-imp-footer-cards" style="margin-top:var(--s2)">
+                <div class="c-imp-footer-card">
+                  <p class="c-imp-footer-card__label">Costo final/un.</p>
+                  <p id="import-q-unitario" class="c-imp-footer-card__val">$0.00</p>
+                  <p id="import-q-unitario-bcv" class="c-imp-footer-card__cross">$0.00 (BCV)</p>
+                  <p id="import-q-unitario-cny" class="c-imp-footer-card__cross">¥0.00</p>
+                </div>
+                <div class="c-imp-footer-card"><p class="c-imp-footer-card__label">Por caja</p><p id="import-q-caja" class="c-imp-footer-card__val">$0.00</p></div>
+              </div>
+
+              <!-- Proyección de venta (plan guardado) -->
+              <div id="import-row-plan" class="c-quote-plan" style="display:none;">
+                <div class="c-quote-plan__head">
+                  <i class="fas fa-arrow-trend-up" aria-hidden="true"></i>
+                  <span>Proyección de venta</span>
+                </div>
+                <div class="c-quote-plan__grid">
+                  <div class="c-quote-plan__cell">
+                    <span class="c-quote-plan__label">Precio venta/un.</span>
+                    <strong id="import-q-venta-unit" class="c-quote-plan__val">$0.00</strong>
+                    <span id="import-q-venta-unit-bcv" class="c-quote-plan__sub">$0.00 (BCV)</span>
+                  </div>
+                  <div class="c-quote-plan__cell">
+                    <span class="c-quote-plan__label">Ganancia/un.</span>
+                    <strong id="import-q-gan-unit" class="c-quote-plan__val c-quote-plan__val--green">$0.00</strong>
+                    <span id="import-q-margen" class="c-quote-plan__sub">0.00% margen</span>
+                  </div>
+                  <div class="c-quote-plan__cell c-quote-plan__cell--wide">
+                    <span class="c-quote-plan__label">Ganancia total proyectada</span>
+                    <strong id="import-q-gan-total" class="c-quote-plan__val c-quote-plan__val--green">$0.00</strong>
+                    <span id="import-q-gan-total-sub" class="c-quote-plan__sub">ROI 0.00%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Columna der: simulador -->
+        <div class="c-import-right">
+          <section class="c-sim-card c-stagger-1" aria-label="Simulador de ganancia">
+            <h3 class="c-sim-card__title"><i class="fas fa-calculator"></i> Simular Venta</h3>
+
+            <!-- Tasas de referencia en vivo -->
+            <div class="c-sim-rates" aria-label="Tasas de referencia">
+              <div class="c-sim-rate c-sim-rate--buy">
+                <span class="c-sim-rate__lab">Binance compra</span>
+                <span id="sim-rate-bin-buy" class="c-sim-rate__val">--</span>
+                <span class="c-sim-rate__unit">Bs/USDT</span>
+              </div>
+              <div class="c-sim-rate c-sim-rate--sell">
+                <span class="c-sim-rate__lab">Binance venta</span>
+                <span id="sim-rate-bin-sell" class="c-sim-rate__val">--</span>
+                <span class="c-sim-rate__unit">Bs/USDT</span>
+              </div>
+              <div class="c-sim-rate c-sim-rate--bcv">
+                <span class="c-sim-rate__lab">BCV</span>
+                <span id="sim-rate-bcv" class="c-sim-rate__val">--</span>
+                <span class="c-sim-rate__unit">Bs/$</span>
+              </div>
+              <div class="c-sim-rate c-sim-rate--cny">
+                <span class="c-sim-rate__lab">Yuan</span>
+                <span id="sim-rate-cny" class="c-sim-rate__val">--</span>
+                <span class="c-sim-rate__unit">¥/$</span>
+              </div>
+            </div>
+
+            <!-- Origen del costo -->
+            <p class="c-sim-group-label">Origen del costo</p>
+            <div class="c-sim-toggle-group">
+              <button id="btn-src-calc"   onclick="setSimSource('calc')"   type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-indigo-600 text-white shadow">Desde importación</button>
+              <button id="btn-src-manual" onclick="setSimSource('manual')" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Costo manual</button>
+            </div>
+
+            <!-- Manual input -->
+            <div id="sim-manual-input-container" class="c-sim-manual-wrap" style="display:none;">
+              <span class="c-sim-manual-prefix" aria-hidden="true">$</span>
+              <input type="number" inputmode="decimal" id="sim-costo-manual" class="c-sim-manual-input" placeholder="Costo base por unidad/caja" oninput="calcGanancia()">
+            </div>
+
+            <!-- Unidad de venta -->
+            <p class="c-sim-group-label">Vender por</p>
+            <div class="c-sim-toggle-group">
+              <button id="btn-sim-unidad" onclick="setSimType('unidad')" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-emerald-600 text-white shadow">Por unidad</button>
+              <button id="btn-sim-caja"   onclick="setSimType('caja')"   type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Por caja</button>
+            </div>
+
+            <!-- Modo de cálculo -->
+            <p class="c-sim-group-label">Modo de cálculo</p>
+            <div class="c-sim-toggle-group">
+              <button id="btn-mode-precio" onclick="setSimMode('precio')" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-indigo-600 text-white shadow">Precio ($)</button>
+              <button id="btn-mode-bs"     onclick="setSimMode('bs')"     type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Precio (Bs.)</button>
+              <button id="btn-mode-pct"    onclick="setSimMode('pct')"    type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Margen (%)</button>
+            </div>
+
+            <!-- Costo base en uso -->
+            <div class="c-sim-base" id="sim-base-row">
+              <div class="c-sim-base__left">
+                <span class="c-sim-base__lab">Costo base</span>
+                <span id="sim-base-type" class="c-sim-base__type">por unidad</span>
+              </div>
+              <div class="c-sim-base__right">
+                <span id="sim-base-usd" class="c-sim-base__usd">$0.00</span>
+                <span id="sim-base-bs"  class="c-sim-base__bs">Bs 0,00</span>
+              </div>
+            </div>
+
+            <!-- Sim input -->
+            <div class="c-sim-input-wrap">
+              <label class="sr-only" for="sim-input">Valor de simulación</label>
+              <span id="sim-input-icon" class="c-sim-input-icon" aria-hidden="true">$</span>
+              <input type="number" inputmode="decimal" id="sim-input" class="c-sim-input" placeholder="Precio venta" oninput="onSimInputManual()">
+            </div>
+
+            <!-- Margen rápido: aplica un margen sobre el costo base -->
+            <div class="c-sim-quick" aria-label="Margen rápido">
+              <span class="c-sim-quick__label"><i class="fas fa-bolt" aria-hidden="true"></i> Margen rápido sobre el costo</span>
+              <div class="c-sim-quick__chips">
+                <button type="button" class="c-sim-chip" data-margin="20"  onclick="aplicarMargenRapido(20)"><span class="c-sim-chip__main">+20%</span><span class="c-sim-chip__sub">×1.2</span></button>
+                <button type="button" class="c-sim-chip" data-margin="30"  onclick="aplicarMargenRapido(30)"><span class="c-sim-chip__main">+30%</span><span class="c-sim-chip__sub">×1.3</span></button>
+                <button type="button" class="c-sim-chip" data-margin="50"  onclick="aplicarMargenRapido(50)"><span class="c-sim-chip__main">+50%</span><span class="c-sim-chip__sub">×1.5</span></button>
+                <button type="button" class="c-sim-chip" data-margin="80"  onclick="aplicarMargenRapido(80)"><span class="c-sim-chip__main">+80%</span><span class="c-sim-chip__sub">×1.8</span></button>
+                <button type="button" class="c-sim-chip" data-margin="100" onclick="aplicarMargenRapido(100)"><span class="c-sim-chip__main">×2</span><span class="c-sim-chip__sub">+100%</span></button>
+                <button type="button" class="c-sim-chip" data-margin="200" onclick="aplicarMargenRapido(200)"><span class="c-sim-chip__main">×3</span><span class="c-sim-chip__sub">+200%</span></button>
+              </div>
+            </div>
+
+            <!-- Resultados simulador -->
+            <div class="c-sim-results">
+              <!-- Precio de venta (destacado) -->
+              <div class="c-sim-price">
+                <span class="c-sim-price__label">Precio de venta</span>
+                <span id="sim-precio-usd" class="c-sim-price__usd">$0.00</span>
+                <span id="sim-precio-bcv" class="c-sim-price__cross">Bs 0,00 · $0.00 BCV</span>
+              </div>
+
+              <div class="c-sim-result-row">
+                <span id="lbl-res-1" class="c-sim-result-row__label">Ganancia neta</span>
+                <div class="c-sim-result-row__right">
+                  <span id="sim-res-1" class="c-sim-result-row__val text-slate-400 font-bold text-sm block">$0.00</span>
+                  <span id="sim-res-1-cross" class="c-sim-result-row__cross">Bs 0,00 · $0.00 BCV</span>
+                </div>
+              </div>
+              <div class="c-sim-result-row">
+                <span id="lbl-res-2" class="c-sim-result-row__label">Rentabilidad (ROI)</span>
+                <span id="sim-res-2" class="c-sim-result-row__val text-slate-400 font-bold text-sm">0.00%</span>
+              </div>
+              <div class="c-sim-result-row">
+                <span class="c-sim-result-row__label">Margen s/ venta</span>
+                <span id="sim-margen" class="c-sim-result-row__val text-slate-400 font-bold text-sm">0.00%</span>
+              </div>
+              <div id="row-sim-total" class="c-sim-result-row c-sim-result-row--total" style="display:none;">
+                <span class="c-sim-result-row__label">Ganancia total <span id="sim-total-basis" class="c-sim-result-row__basis"></span></span>
+                <div class="c-sim-result-row__right">
+                  <span id="sim-total" class="c-sim-result-row__val font-bold text-sm block">$0.00</span>
+                  <span id="sim-total-bcv" class="c-sim-result-row__cross">Bs 0,00 · $0.00 BCV</span>
+                </div>
+              </div>
+              <div id="row-sim-unitario" class="c-sim-result-row c-sim-result-row--equiv" style="display:none;">
+                <span class="c-sim-result-row__label">Equiv. unitario</span>
+                <div class="c-sim-result-row__right">
+                  <span id="sim-unit-val" class="c-sim-result-row__val block">$0.00</span>
+                  <span id="sim-unit-cross" class="c-sim-result-row__cross">Bs 0,00 · $0.00 BCV</span>
+                </div>
+              </div>
+              <div class="c-sim-result-row">
+                <span class="c-sim-result-row__label">Punto de equilibrio</span>
+                <div class="c-sim-result-row__right">
+                  <span id="sim-breakeven" class="c-sim-result-row__val text-slate-400 font-bold text-sm block">$0.00</span>
+                  <span id="sim-breakeven-bcv" class="c-sim-result-row__cross">Bs 0,00 · $0.00 BCV</span>
+                </div>
+              </div>
+              <div id="row-sim-recuperar" class="c-sim-result-row" style="display:none;">
+                <span class="c-sim-result-row__label">Recuperar inversión</span>
+                <div class="c-sim-result-row__right">
+                  <span id="sim-recuperar" class="c-sim-result-row__val text-amber-400 font-bold text-sm block">—</span>
+                  <span id="sim-recuperar-sub" class="c-sim-result-row__cross">unidades a vender</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sparkline de ganancia proyectada -->
+            <div id="sim-spark-wrap" class="c-sim-spark" style="display:none;">
+              <div class="c-sim-spark__head">
+                <span class="c-sim-spark__title">Ganancia proyectada</span>
+                <span class="c-sim-spark__hint">Cruza $0 en el punto de equilibrio</span>
+              </div>
+              <div id="sim-spark" class="c-sim-spark__canvas" aria-hidden="true"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+  </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
