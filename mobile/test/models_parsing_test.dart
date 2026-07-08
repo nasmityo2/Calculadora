@@ -165,6 +165,42 @@ void main() {
       expect(updated.binanceStats!.change24h, 2.5);
       expect(updated.bcvStats!.change24h, -0.5);
     });
+
+    test('cache round-trip restores binance_stats and bcv_stats', () {
+      // Simulate the JSON that LocalDb.saveSnapshot() produces
+      final cacheJson = {
+        'tasas': {
+          'binance': 100.5,
+          'binance_compra': 98.3,
+          'bcv': 80.1,
+          'bcv_publicada': 80.1,
+          'cny': 7.2,
+        },
+        'bcv_meta': {
+          'vigente_para': '2024-01-15',
+          'publicada_el': '2024-01-14',
+          'nota': null,
+          'hay_nueva_publicada': false,
+        },
+        'diff_bs': 20.4,
+        'diff_pct': 25.5,
+        'last_update': '2024-01-15, 10:30',
+        'binance_stats': {'change24h': 2.5, 'changePct24h': 3.1},
+        'bcv_stats': {'change24h': -0.5, 'changePct24h': -0.62},
+      };
+
+      final restored = TasasSnapshot.fromApi(cacheJson);
+
+      expect(restored.binanceStats, isNotNull);
+      expect(restored.binanceStats!.change24h, 2.5);
+      expect(restored.binanceStats!.changePct24h, 3.1);
+      expect(restored.bcvStats, isNotNull);
+      expect(restored.bcvStats!.change24h, -0.5);
+      expect(restored.bcvStats!.changePct24h, -0.62);
+      // Core fields still OK
+      expect(restored.tasas.binance, 100.5);
+      expect(restored.diffBs, 20.4);
+    });
   });
 
   group('HistorialPoint fromJson', () {

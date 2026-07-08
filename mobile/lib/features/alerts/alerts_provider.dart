@@ -4,21 +4,34 @@ import 'package:dayzo_app/features/alerts/alert_rule.dart';
 import 'package:dayzo_app/features/alerts/alerts_repository.dart';
 
 class AlertsProvider extends ChangeNotifier {
-  final AlertsRepository _repository = AlertsRepository();
+  final AlertsRepository _repository;
+
+  AlertsProvider() : _repository = AlertsRepository();
+
+  /// Constructor for testing — accepts a mocked repository.
+  AlertsProvider.test(this._repository);
 
   List<AlertRule> _rules = [];
   List<AlertRule> get rules => List.unmodifiable(_rules);
 
-  /// Tracks last-fire time per rule id to debounce (10s).
+  /// Tracks whether each rule was in "fired" state at last evaluation.
+  final Map<String, bool> _wasFired = {};
+
+  /// Tracks last-fire time per rule id for debounce anti-rebote (2 s).
   final Map<String, int> _lastFiredAt = {};
 
   Future<void> init() async {
     _rules = await _repository.load();
+    // Initialize _wasFired from persisted state (all false = not fired).
+    for (final r in _rules) {
+      _wasFired[r.id] = false;
+    }
     notifyListeners();
   }
 
   Future<void> addRule(AlertRule rule) async {
     _rules = [..._rules, rule];
+    _wasFired[rule.id] = false;
     await _repository.save(_rules);
     notifyListeners();
   }
@@ -28,18 +41,23 @@ class AlertsProvider extends ChangeNotifier {
       for (final r in _rules)
         if (r.id == id) r.copyWith(activo: !r.activo) else r,
     ];
+    // Reset edge state when toggling.
+    _wasFired[id] = false;
     await _repository.save(_rules);
     notifyListeners();
   }
 
   Future<void> removeRule(String id) async {
     _rules = _rules.where((r) => r.id != id).toList();
+    _wasFired.remove(id);
     _lastFiredAt.remove(id);
     await _repository.save(_rules);
     notifyListeners();
   }
 
   /// Evaluates all active rules against current rate values.
+  /// Fires ONLY on edge (flanco): transition from not-fired → fired.
+  /// Re-arms when value goes back to the safe side.
   /// Returns a list of (rule, value) pairs that fired.
   List<(AlertRule, double)> evaluate(TasasSnapshotForAlerts data) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -51,22 +69,36 @@ class AlertsProvider extends ChangeNotifier {
       final value = _getValue(rule, data);
       if (value == null) continue;
 
-      final bool fired;
+      final bool currentlyFired;
       switch (rule.condicion) {
         case AlertCondicion.mayorQue:
-          fired = value > rule.umbral;
+          currentlyFired = value > rule.umbral;
         case AlertCondicion.menorQue:
-          fired = value < rule.umbral;
+          currentlyFired = value < rule.umbral;
       }
 
-      if (!fired) continue;
+      final wasFired = _wasFired[rule.id] ?? false;
 
-      // Debounce: skip if fired less than 10s ago
-      final last = _lastFiredAt[rule.id];
-      if (last != null && (now - last) < 10000) continue;
+      if (currentlyFired) {
+        if (!wasFired) {
+          // Clean edge: not-fired → fired, always fire immediately.
+          _lastFiredAt[rule.id] = now;
+          triggered.add((rule, value));
+        } else {
+          // Still fired: debounce to avoid re-triggering within 2 s.
+          final last = _lastFiredAt[rule.id];
+          if (last == null || (now - last) >= 2000) {
+            _lastFiredAt[rule.id] = now;
+            triggered.add((rule, value));
+          }
+        }
+      } else {
+        // Re-arm: reset debounce timer so next clean edge fires.
+        _lastFiredAt.remove(rule.id);
+      }
 
-      _lastFiredAt[rule.id] = now;
-      triggered.add((rule, value));
+      // Update edge state for next evaluation
+      _wasFired[rule.id] = currentlyFired;
     }
 
     return triggered;

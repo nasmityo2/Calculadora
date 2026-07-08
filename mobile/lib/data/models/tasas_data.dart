@@ -106,6 +106,14 @@ class TasasSnapshot {
       diffBs: Tasas._toDouble(json['diff_bs']),
       diffPct: Tasas._toDouble(json['diff_pct']),
       lastUpdate: json['last_update'] as String? ?? '',
+      binanceStats: json['binance_stats'] != null
+          ? RateStats.fromJson(
+              json['binance_stats'] as Map<String, dynamic>?)
+          : null,
+      bcvStats: json['bcv_stats'] != null
+          ? RateStats.fromJson(
+              json['bcv_stats'] as Map<String, dynamic>?)
+          : null,
     );
   }
 
