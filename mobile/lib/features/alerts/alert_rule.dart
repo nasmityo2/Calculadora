@@ -4,9 +4,9 @@ extension AlertTipoLabel on AlertTipo {
   String get label {
     switch (this) {
       case AlertTipo.binance:
-        return 'Binance · Comprar';
-      case AlertTipo.binanceCompra:
         return 'Binance · Vender';
+      case AlertTipo.binanceCompra:
+        return 'Binance · Comprar';
       case AlertTipo.bcv:
         return 'BCV';
       case AlertTipo.bcvPublicada:
@@ -66,20 +66,7 @@ class AlertRule {
         activo: json['activo'] as bool? ?? true,
       );
 
-  String get tipoLabel {
-    switch (tipo) {
-      case AlertTipo.binance:
-        return 'Binance · Comprar';
-      case AlertTipo.binanceCompra:
-        return 'Binance · Vender';
-      case AlertTipo.bcv:
-        return 'BCV';
-      case AlertTipo.bcvPublicada:
-        return 'BCV Publicada';
-      case AlertTipo.brecha:
-        return 'Brecha Binance vs BCV';
-    }
-  }
+  String get tipoLabel => tipo.label;
 
   String get condicionLabel {
     switch (condicion) {

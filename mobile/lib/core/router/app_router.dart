@@ -20,7 +20,7 @@ GoRouter buildRouter() {
       final isLoggedIn = auth.isLoggedIn;
       final location = state.uri.path;
 
-      final publicRoutes = {'/', '/login', '/registro', '/calculadora-historica', '/alertas'};
+      final publicRoutes = {'/', '/login', '/registro', '/calculadora-historica', '/alertas', '/historial'};
       final isPublic = publicRoutes.contains(location);
 
       if (!isLoggedIn && !isPublic) {

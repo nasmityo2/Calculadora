@@ -1,9 +1,8 @@
+import 'env.dart';
+
 /// URL base de la API (mismo servidor que la web).
 class ApiConfig {
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://dayzove.lat',
-  );
+  static const String baseUrl = Env.apiBaseUrl;
 
   static Uri tasasUri({String range = '24h', bool stats = true}) {
     return Uri.parse('$baseUrl/api/tasas-venezuela').replace(
