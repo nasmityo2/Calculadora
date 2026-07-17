@@ -416,20 +416,26 @@
               <h3 class="c-quotes-card__title"><i class="fas fa-folder-open"></i> Cotizaciones</h3>
               <div class="c-quotes-card__meta">
                 <span id="import-quotes-count" class="c-quotes-count">0</span>
-                <select id="import-quotes-company-filter" onchange="renderImportQuotesList()" class="c-quotes-filter" aria-label="Filtrar por empresa">
-                  <option value="ALL">Todas</option>
+                <select id="import-quotes-company-filter" class="c-quotes-filter" aria-label="Filtrar por empresa">
+                  <option value="ALL">Todas las empresas</option>
                 </select>
-                <select id="import-quotes-sort" onchange="renderImportQuotesList()" class="c-quotes-filter" aria-label="Ordenar">
+                <select id="import-quotes-plan-filter" class="c-quotes-filter" aria-label="Filtrar por plan de venta">
+                  <option value="all">Todos los planes</option>
+                  <option value="with">Con plan</option>
+                  <option value="without">Sin plan</option>
+                </select>
+                <select id="import-quotes-sort" class="c-quotes-filter" aria-label="Ordenar">
                   <option value="recent">Más reciente</option>
-                  <option value="inversion">Mayor inversión</option>
-                  <option value="empresa">Empresa</option>
-                  <option value="nombre">Nombre</option>
+                  <option value="investment">Mayor inversión</option>
+                  <option value="profit">Mayor ganancia</option>
+                  <option value="company">Empresa</option>
+                  <option value="name">Nombre</option>
                 </select>
               </div>
             </div>
             <div class="c-quotes-search">
               <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
-              <input type="search" id="import-quotes-search" class="c-quotes-search__input" placeholder="Buscar por nombre…" oninput="renderImportQuotesList()" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar cotización">
+              <input type="search" id="import-quotes-search" class="c-quotes-search__input" placeholder="Buscar por nombre…" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar cotización">
             </div>
             <div class="c-quotes-save-row">
               <div class="c-quotes-save-fields c-auth-only">
@@ -442,7 +448,10 @@
               </button>
             </div>
 
-            <div id="import-quotes-list" class="c-quotes-list"></div>
+            <div id="import-quotes-list" class="c-quotes-list" aria-live="polite" aria-busy="false"></div>
+            <button type="button" id="import-quotes-load-more" class="c-quotes-load-more" hidden>
+              Cargar más cotizaciones
+            </button>
 
             <!-- Panel edición / vista detallada (después de la lista; las filas también muestran resumen expandido) -->
             <div id="import-quotes-detail" class="c-quote-detail c-quote-detail--panel hidden">
@@ -553,6 +562,7 @@
         <div class="c-import-right">
           <section class="c-sim-card c-stagger-1" aria-label="Simulador de ganancia">
             <h3 class="c-sim-card__title"><i class="fas fa-calculator"></i> Simular Venta</h3>
+            <div id="sim-source-banner" class="c-sim-source-banner" role="status" hidden></div>
 
             <!-- Tasas de referencia en vivo -->
             <div class="c-sim-rates" aria-label="Tasas de referencia">

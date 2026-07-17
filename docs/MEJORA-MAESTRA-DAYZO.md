@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:24:00Z  
+Última actualización: 2026-07-17T08:35:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 4 — UX cotizaciones
+Fase actual: 5 — Simulador
 
 ## Estados
 
@@ -18,8 +18,8 @@ Fase actual: 4 — UX cotizaciones
 - [x] Fase 1 — Seguridad urgente
 - [x] Fase 2 — Cálculos canónicos
 - [x] Fase 3 — API/lista de cotizaciones
-- [~] Fase 4 — UX cotizaciones
-- [ ] Fase 5 — Simulador
+- [x] Fase 4 — UX cotizaciones
+- [~] Fase 5 — Simulador
 - [ ] Fase 6 — Login DAYZO
 - [ ] Fase 7 — Tasas y frescura
 - [ ] Fase 8 — Modularización/performance/CSP
@@ -222,3 +222,43 @@ Fase actual: 4 — UX cotizaciones
 - Prueba manual: capturas phase3 con login, simulador y lista legacy; API resumen verificada separadamente.
 - Riesgo/rollback: adaptador legacy evita regresión visual hasta F4; rollback de código conserva FK válida.
 - Siguiente tarea exacta: Fase 4, consumir resumen, acordeón único y detalle lazy con skeleton/reintento.
+
+## Fase 4 — UX cotizaciones
+
+- ID: F4-01 / tarjeta compacta y detalle lazy
+- Estado: [x] COMPLETADO
+- Archivos: `public/index.html`, `public/app.js`, `public/styles.css`.
+- Evidencia: resumen cerrado por defecto con nombre, empresa, fecha, inversión, costo/unidad y ganancia; un solo `aria-expanded=true`; detalle por UUID bajo demanda, cache, skeleton, error y reintento.
+- Comandos: Playwright abre primera, fuerza 503, reintenta, abre segunda y confirma que la primera se cierra.
+- Resultado: el listado ya consume API v2 sin `legacy=1`; edición, imagen y eliminar permanecen en menú secundario.
+- Riesgo/rollback: el detalle requiere red la primera vez; cache por sesión y reintento reducen impacto. Revertir UI y activar `legacy=1` restaura temporalmente el cliente anterior.
+- Pendiente siguiente: filtros/paginación.
+
+- ID: F4-02 / búsqueda, filtros y cargar más
+- Estado: [x] COMPLETADO
+- Archivos: `public/index.html`, `public/app.js`.
+- Evidencia: búsqueda debounce 300 ms; filtros empresa/con-sin-plan; cinco órdenes server-side; páginas de 20 y CTA “Cargar más”.
+- Comandos: E2E con 0, 1, 20 y 100 registros en viewport 390.
+- Resultado: estados vacío/error/reintento y conteo cargados/total; 100 registros se obtienen en cinco páginas sin perder orden.
+- Riesgo/rollback: filtros reinician expansión de forma intencional para evitar detalle huérfano.
+- Pendiente siguiente: acción primaria.
+
+- ID: F4-03 / Simular venta y acciones
+- Estado: [x] COMPLETADO
+- Archivos: `public/app.js`, `public/index.html`, `public/styles.css`.
+- Evidencia: CTA primario “Simular venta”; carga detalle, clona la cotización en `saleSimulationSession`, precarga costos/cantidad/precio y muestra banner sin PUT. Menú conserva editar/imagen/eliminar.
+- Comandos: E2E compara JSON SQLite antes/después de simular y confirma igualdad.
+- Resultado: la acción navega al simulador y no muta el registro.
+- Riesgo/rollback: Fase 5 completa el flujo progresivo y guardado explícito; por ahora usa controles existentes.
+- Pendiente siguiente: métricas visuales.
+
+- ID: F4-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: web, Playwright/config, servidor E2E, capturas `artifacts/phase4`, tracker.
+- Resumen git diff: lista resumida compacta, lazy detail, filtros/paginación, acción simular y E2E responsive.
+- Comandos exactos: `npm run check`; `npm run test:e2e`; `CAPTURE_LABEL=phase4 node scripts/capture-baseline.js`.
+- Resultado: 15 unit + 3 integration + 1 E2E verdes. Dos intentos iniciales del E2E no interceptaron requests por el service worker; se diagnosticó y aisló con `serviceWorkers:'block'`, luego quedó verde.
+- Pruebas manuales: capturas 1440/390/360; cero overflow; targets principales 44 px; menú accesible.
+- Métricas antes/después: DOM con 20 cotizaciones 2,341 → 1,268 nodos (−45.8%); payload 26,461 → 10,285 B (−61.1%); Lighthouse app performance 74 → 76; RSS 79 → 81 MB.
+- Riesgo/rollback: JS/CSS crecen temporalmente por convivencia con renderer legacy, que se elimina en Fase 8; rollback al commit F3 mantiene API.
+- Siguiente tarea exacta: Fase 5, convertir simulador a fuente → forma de venta → resultado y separar guardado/cancelación.

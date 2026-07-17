@@ -66,6 +66,7 @@ let feePlataforma = 0.03;
 let feeBanco = 0.0125;
 let lastImportQuote = null;
 let lastSimPlan = null;
+let saleSimulationSession = null;
 let importQuotesAll = [];
 let importCurrentQuoteId = null;
 let importCurrentQuoteName = null;
@@ -75,8 +76,13 @@ let importEditedQuote = null;
 let importEditedFullName = '';
 let importEditedCompanyTarifaUSD = null;
 
-/** Cotizaciones con fila expandida (varias a la vez) */
-const importQuotesExpandedIds = new Set();
+/** Solo una cotización puede estar expandida a la vez. */
+let importExpandedQuoteId = null;
+let importQuotesTotal = 0;
+let importQuotesNextOffset = null;
+let importQuotesLoading = false;
+let importQuotesSearchTimer = null;
+let importQuotesAbortController = null;
 /** id → registro completo API `/api/import-quotes/:id` */
 const importQuoteDetailCache = new Map();
 /** Ancla DOM para devolver `#import-quotes-detail` a su sitio original */
@@ -1936,7 +1942,52 @@ function renderProductoLinkDetalle(productoLink) {
     anchor.textContent = safe.replace(/^https?:\/\//i, '');
 }
 
-async function cargarCotizacionesImport() {
+function importQuoteListParams(offset = 0) {
+    const params = new URLSearchParams({
+        limit: '20',
+        offset: String(offset),
+        sort: document.getElementById('import-quotes-sort')?.value || 'recent',
+        plan: document.getElementById('import-quotes-plan-filter')?.value || 'all',
+    });
+    const search = document.getElementById('import-quotes-search')?.value.trim();
+    const company = document.getElementById('import-quotes-company-filter')?.value;
+    if (search) params.set('search', search);
+    if (company && company !== 'ALL') params.set('company', company);
+    return params;
+}
+
+function setImportQuotesLoading(loading, { reset = false } = {}) {
+    importQuotesLoading = loading;
+    const listEl = document.getElementById('import-quotes-list');
+    const moreBtn = document.getElementById('import-quotes-load-more');
+    if (moreBtn) {
+        moreBtn.disabled = loading;
+        moreBtn.hidden = loading || importQuotesNextOffset == null;
+    }
+    if (loading && reset && listEl) {
+        listEl.innerHTML = Array.from({ length: 3 }, () => `
+          <div class="c-quote-card c-quote-card--skeleton" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>`).join('');
+        listEl.setAttribute('aria-busy', 'true');
+    } else if (listEl) {
+        listEl.setAttribute('aria-busy', String(loading));
+    }
+}
+
+function updateImportQuoteCompanyOptions(facets) {
+    const select = document.getElementById('import-quotes-company-filter');
+    if (!select) return;
+    const current = select.value;
+    const options = Array.isArray(facets?.companies) ? facets.companies : [];
+    select.innerHTML = '<option value="ALL">Todas las empresas</option>' +
+        options.map(({ name, count }) =>
+            `<option value="${escapeHtml(name)}">${escapeHtml(name)} (${Number(count) || 0})</option>`
+        ).join('');
+    if ([...select.options].some(option => option.value === current)) select.value = current;
+}
+
+async function cargarCotizacionesImport({ reset = true } = {}) {
     const listEl  = document.getElementById('import-quotes-list');
     const countEl = document.getElementById('import-quotes-count');
     const selEl   = document.getElementById('import-quotes-company-filter');
@@ -1948,29 +1999,50 @@ async function cargarCotizacionesImport() {
         listEl.innerHTML = '<p class="c-import-quote-msg"><a href="/login">Inicia sesión</a> para ver y guardar tus cotizaciones.</p>';
         return;
     }
+    if (importQuotesLoading) return;
+    const offset = reset ? 0 : (importQuotesNextOffset ?? importQuotesAll.length);
+    if (!reset && importQuotesNextOffset == null) return;
+    if (reset) {
+        importQuotesAbortController?.abort();
+        importQuotesAbortController = new AbortController();
+        importQuotesAll = [];
+        importQuotesTotal = 0;
+        importQuotesNextOffset = null;
+        importExpandedQuoteId = null;
+    }
+    setImportQuotesLoading(true, { reset });
     try {
-        // Adaptador temporal hasta que la lista compacta consuma resumen+detalle.
-        const r = await authFetch('/api/import-quotes?legacy=1&limit=20');
+        const params = importQuoteListParams(offset);
+        const r = await authFetch('/api/import-quotes?' + params.toString(), {
+            signal: importQuotesAbortController?.signal,
+        });
         if (r.status === 401) return;
         const j = await r.json();
-        importQuotesAll = (j && j.quotes) ? j.quotes : [];
-
-        if (selEl) {
-            const seen = new Set();
-            const empresas = [];
-            importQuotesAll.forEach(q => {
-                const emp = q.empresaNombre || 'Sin empresa';
-                if (!seen.has(emp)) { seen.add(emp); empresas.push(emp); }
-            });
-            selEl.innerHTML = '<option value="ALL">Todas</option>' +
-                empresas.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join('');
-        }
-        if (countEl) countEl.innerText = importQuotesAll.length;
+        if (!r.ok || !j.success) throw new Error(j?.error?.message || j?.message || 'Error cargando cotizaciones');
+        const incoming = Array.isArray(j.quotes) ? j.quotes : [];
+        importQuotesAll = reset ? incoming : importQuotesAll.concat(incoming);
+        importQuotesTotal = Number(j.total) || 0;
+        importQuotesNextOffset = j.pagination?.nextOffset ?? null;
+        updateImportQuoteCompanyOptions(j.facets);
+        if (countEl) countEl.innerText = `${importQuotesAll.length}/${importQuotesTotal}`;
         renderImportQuotesList();
     } catch (e) {
+        if (e?.name === 'AbortError') return;
         console.error(e);
-        if (listEl) listEl.innerHTML = '<p class="c-import-quote-msg c-import-quote-msg--error">Error cargando cotizaciones.</p>';
+        if (listEl && reset) {
+            listEl.innerHTML = `
+              <div class="c-import-quote-msg c-import-quote-msg--error" role="alert">
+                <p>No se pudieron cargar las cotizaciones.</p>
+                <button type="button" class="c-quote-retry" data-quote-action="reload">Reintentar</button>
+              </div>`;
+        }
+    } finally {
+        setImportQuotesLoading(false);
     }
+}
+
+function cargarMasCotizacionesImport() {
+    return cargarCotizacionesImport({ reset: false });
 }
 
 function computeImportQuoteDetailLabels(q) {
@@ -2089,35 +2161,28 @@ async function abrirPanelEdicionCotizacionImport(id) {
 function renderImportQuotesList() {
     const listEl  = document.getElementById('import-quotes-list');
     const countEl = document.getElementById('import-quotes-count');
-    const selEl   = document.getElementById('import-quotes-company-filter');
     if (!listEl) return;
-
-    const sortEl   = document.getElementById('import-quotes-sort');
-    const searchEl = document.getElementById('import-quotes-search');
-    const filter = selEl ? selEl.value : 'ALL';
-    const sortBy = sortEl ? sortEl.value : 'recent';
-    const search = (searchEl?.value || '').trim().toLowerCase();
-
-    let quotes = importQuotesAll.slice();
-    if (filter && filter !== 'ALL') quotes = quotes.filter(q => (q.empresaNombre || 'Sin empresa') === filter);
-    if (search) quotes = quotes.filter(q => (q.name || '').toLowerCase().includes(search));
-
-    quotes.sort((a, b) => {
-        if (sortBy === 'inversion') return (Number(b.inversionTotalUSD) || 0) - (Number(a.inversionTotalUSD) || 0);
-        if (sortBy === 'empresa')   return (a.empresaNombre || '').localeCompare(b.empresaNombre || '');
-        if (sortBy === 'nombre')    return (a.name || '').localeCompare(b.name || '');
-        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0); // recent
-    });
-
-    if (countEl) countEl.innerText = quotes.length;
-    if (!quotes.length) {
+    if (countEl) countEl.innerText = `${importQuotesAll.length}/${importQuotesTotal}`;
+    if (!importQuotesAll.length) {
+        const search = document.getElementById('import-quotes-search')?.value.trim();
         listEl.innerHTML = search
             ? `<p class="c-import-quote-msg">Sin resultados para “${escapeHtml(search)}”.</p>`
-            : '<p class="c-import-quote-msg">Sin cotizaciones.</p>';
+            : '<p class="c-import-quote-msg">Aún no tienes cotizaciones. Guarda la primera desde el cálculo actual.</p>';
         return;
     }
-
-    listEl.innerHTML = quotes.map(buildImportQuoteCardHTML).join('');
+    listEl.innerHTML = importQuotesAll.map(buildImportQuoteCardHTML).join('');
+    if (importExpandedQuoteId) {
+        const cached = importQuoteDetailCache.get(importExpandedQuoteId);
+        const detail = document.getElementById(importQuoteDetailRegionId(importExpandedQuoteId));
+        const toggle = listEl.querySelector(`[data-quote-action="toggle"][data-quote-id="${CSS.escape(importExpandedQuoteId)}"]`);
+        if (detail && toggle) {
+            detail.hidden = false;
+            toggle.setAttribute('aria-expanded', 'true');
+            if (cached) detail.innerHTML = buildImportQuoteLazyDetailHTML(cached);
+        }
+    }
+    const moreBtn = document.getElementById('import-quotes-load-more');
+    if (moreBtn) moreBtn.hidden = importQuotesNextOffset == null;
     updateAuthUI();
 }
 
@@ -2126,7 +2191,7 @@ function renderImportQuotesList() {
  * Orden: precio/costo unitario (arriba) → KPIs → desglose → totales →
  * link del producto → proyección de venta → acciones.
  */
-function buildImportQuoteCardHTML(item) {
+function buildImportQuoteCardHTMLLegacy(item) {
     const q = (item && item.quote) ? item.quote : {};
     const idAttr = escapeHtml(item?.id ?? '');
     const idJson = JSON.stringify(String(item?.id ?? ''));
@@ -2251,6 +2316,227 @@ function buildImportQuoteCardHTML(item) {
     </div>`;
 }
 
+function importQuoteDetailRegionId(id) {
+    return `quote-detail-${String(id || '').replace(/[^a-z0-9_-]/gi, '')}`;
+}
+
+function buildImportQuoteCardHTML(item) {
+    const id = String(item?.id || '');
+    const safeId = escapeHtml(id);
+    const name = escapeHtml(item?.name || 'Sin nombre');
+    const company = escapeHtml(item?.empresaNombre || 'Sin empresa');
+    const date = item?.createdAt
+        ? escapeHtml(new Date(item.createdAt).toLocaleDateString('es-VE', {
+            day: '2-digit', month: 'short', year: 'numeric',
+        }))
+        : '—';
+    const profit = Number(item?.gananciaTotalUSD);
+    const hasProfit = Number.isFinite(profit);
+    const profitClass = profit >= 0 ? 'c-quote-card__profit--up' : 'c-quote-card__profit--down';
+    const detailId = importQuoteDetailRegionId(id);
+    const expanded = importExpandedQuoteId === id;
+    return `
+      <article class="c-quote-card c-quote-card--compact" data-quote-id="${safeId}">
+        <div class="c-quote-compact__main">
+          <div class="c-quote-card__titlewrap">
+            <h4 class="c-quote-card__name">${name}</h4>
+            <div class="c-quote-card__tags">
+              <span class="c-quote-card__badge">${company}</span>
+              <time class="c-quote-card__date" datetime="${escapeHtml(item?.createdAt || '')}">${date}</time>
+            </div>
+          </div>
+          ${hasProfit ? `<span class="c-quote-card__profit ${profitClass}">${profit >= 0 ? '+' : ''}${usd(profit)}</span>` : ''}
+        </div>
+        <dl class="c-quote-compact__metrics">
+          <div><dt>Inversión</dt><dd>${usd(Number(item?.inversionTotalUSD))}</dd></div>
+          <div><dt>Costo/un.</dt><dd>${usd(Number(item?.costoUnitarioUSD))}</dd></div>
+          <div><dt>${hasProfit ? 'Ganancia' : 'Plan'}</dt><dd>${hasProfit ? `${profit >= 0 ? '+' : ''}${usd(profit)}` : 'Sin plan'}</dd></div>
+        </dl>
+        <div class="c-quote-compact__actions">
+          <button type="button" class="c-quote-simulate" data-quote-action="simulate" data-quote-id="${safeId}">
+            <i class="fas fa-chart-line" aria-hidden="true"></i> Simular venta
+          </button>
+          <button type="button" class="c-quote-toggle" data-quote-action="toggle" data-quote-id="${safeId}"
+            aria-expanded="${String(expanded)}" aria-controls="${detailId}">
+            <span>${expanded ? 'Ocultar' : 'Ver detalle'}</span>
+            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+          </button>
+          <details class="c-quote-menu">
+            <summary aria-label="Más acciones para ${name}"><i class="fas fa-ellipsis-vertical" aria-hidden="true"></i></summary>
+            <div class="c-quote-menu__items">
+              <button type="button" class="c-auth-only" data-quote-action="edit" data-quote-id="${safeId}">Editar</button>
+              <button type="button" data-quote-action="image" data-quote-id="${safeId}">Imagen</button>
+              <button type="button" class="c-auth-only c-quote-menu__danger" data-quote-action="delete" data-quote-id="${safeId}">Eliminar</button>
+            </div>
+          </details>
+        </div>
+        <div id="${detailId}" class="c-quote-lazy-detail" ${expanded ? '' : 'hidden'}></div>
+      </article>`;
+}
+
+function buildImportQuoteLazyDetailHTML(record) {
+    const quote = record?.quote || {};
+    const labels = computeImportQuoteDetailLabels(quote);
+    if (!labels) return '<p class="c-import-quote-msg">La cotización no contiene un detalle válido.</p>';
+    const product = productoLinkDetailRowHtml(quote.productoLink);
+    const plan = labels.showPlan
+        ? `<section class="c-quote-lazy-detail__section">
+             <h5>Plan de venta</h5>
+             <div class="c-quote-lazy-detail__grid">
+               <div><span>Precio/un.</span><strong>${labels.ventaUnitUSD}</strong></div>
+               <div><span>Ganancia/un.</span><strong>${labels.ganUnitUSD}</strong></div>
+               <div><span>Ganancia total</span><strong>${labels.ganTotalUSD}</strong></div>
+               <div><span>Rentabilidad</span><strong>${escapeHtml(labels.ganTotalSub)}</strong></div>
+             </div>
+           </section>`
+        : '';
+    return `
+      <section class="c-quote-lazy-detail__section">
+        <h5>Resumen</h5>
+        <div class="c-quote-lazy-detail__grid">
+          <div><span>Dimensiones</span><strong>${labels.dimsTxt}</strong></div>
+          <div><span>Unidades</span><strong>${labels.unitsTxt}</strong></div>
+          <div><span>Costo por caja</span><strong>${labels.caja}</strong></div>
+          <div><span>Volumen · peso</span><strong>${labels.vol} · ${labels.peso}</strong></div>
+        </div>
+      </section>
+      <details class="c-quote-lazy-detail__section">
+        <summary>Ver costos y logística</summary>
+        <div class="c-quote-line"><span class="c-quote-line__label">Mercancía</span><span class="c-quote-line__val">${labels.merc}</span></div>
+        ${labels.showEnvioChina ? `<div class="c-quote-line"><span class="c-quote-line__label">Envío China</span><span class="c-quote-line__val">${labels.envioChina}</span></div>` : ''}
+        <div class="c-quote-line"><span class="c-quote-line__label">Plataforma</span><span class="c-quote-line__val">${labels.plat}</span></div>
+        <div class="c-quote-line"><span class="c-quote-line__label">Banco</span><span class="c-quote-line__val">${labels.banco}</span></div>
+        <div class="c-quote-line"><span class="c-quote-line__label">Envío internacional</span><span class="c-quote-line__val">${labels.flete}</span></div>
+        <div class="c-quote-totals"><span class="c-quote-totals__label">Inversión total</span><span class="c-quote-totals__val">${labels.total}</span></div>
+      </details>
+      ${product}
+      ${plan}`;
+}
+
+async function fetchImportQuoteDetail(id, { force = false } = {}) {
+    const sid = String(id || '');
+    if (!force && importQuoteDetailCache.has(sid)) return importQuoteDetailCache.get(sid);
+    const response = await authFetch(`/api/import-quotes/${encodeURIComponent(sid)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.quote) {
+        throw new Error(data?.error?.message || data?.message || 'No se pudo cargar el detalle');
+    }
+    importQuoteDetailCache.set(sid, data.quote);
+    return data.quote;
+}
+
+function collapseImportQuoteDetail(id) {
+    const sid = String(id || '');
+    const region = document.getElementById(importQuoteDetailRegionId(sid));
+    const button = document.querySelector(`[data-quote-action="toggle"][data-quote-id="${CSS.escape(sid)}"]`);
+    if (region) region.hidden = true;
+    if (button) {
+        button.setAttribute('aria-expanded', 'false');
+        const label = button.querySelector('span');
+        if (label) label.textContent = 'Ver detalle';
+    }
+}
+
+async function toggleImportQuoteDetail(id) {
+    const sid = String(id || '');
+    if (importExpandedQuoteId === sid) {
+        collapseImportQuoteDetail(sid);
+        importExpandedQuoteId = null;
+        return;
+    }
+    if (importExpandedQuoteId) collapseImportQuoteDetail(importExpandedQuoteId);
+    importExpandedQuoteId = sid;
+    const region = document.getElementById(importQuoteDetailRegionId(sid));
+    const button = document.querySelector(`[data-quote-action="toggle"][data-quote-id="${CSS.escape(sid)}"]`);
+    if (!region || !button) return;
+    region.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    const label = button.querySelector('span');
+    if (label) label.textContent = 'Ocultar';
+    region.innerHTML = '<div class="c-quote-detail-skeleton" role="status"><span></span><span></span><span></span><em>Cargando detalle…</em></div>';
+    try {
+        const record = await fetchImportQuoteDetail(sid);
+        if (importExpandedQuoteId === sid) region.innerHTML = buildImportQuoteLazyDetailHTML(record);
+    } catch (error) {
+        if (importExpandedQuoteId === sid) {
+            region.innerHTML = `
+              <div class="c-quote-detail-error" role="alert">
+                <span>${escapeHtml(error.message)}</span>
+                <button type="button" data-quote-action="retry-detail" data-quote-id="${escapeHtml(sid)}">Reintentar</button>
+              </div>`;
+        }
+    }
+}
+
+async function retryImportQuoteDetail(id) {
+    importQuoteDetailCache.delete(String(id));
+    importExpandedQuoteId = null;
+    await toggleImportQuoteDetail(id);
+}
+
+async function simularVentaDesdeCotizacion(id) {
+    try {
+        const record = await fetchImportQuoteDetail(id);
+        const quote = record.quote || {};
+        saleSimulationSession = {
+            source: 'saved',
+            quoteId: String(id),
+            name: record.name || 'Cotización',
+            quote: structuredClone(quote),
+        };
+        gCostoUnitario = Number(quote.costoUnitarioUSD) || 0;
+        gCostoCaja = Number(quote.costoPorCajaUSD) || 0;
+        gUnidadesPorCaja = Number(quote.unidadesPorCaja) || 0;
+        lastImportQuote = structuredClone(quote);
+        setSimSource('calc');
+        const price = Number(quote.ventaUnitarioUSD);
+        const input = document.getElementById('sim-input');
+        if (input && price > 0) input.value = String(price);
+        const banner = document.getElementById('sim-source-banner');
+        if (banner) {
+            banner.hidden = false;
+            banner.textContent = `Simulando: ${record.name} · costos congelados de la cotización`;
+        }
+        calcGanancia();
+        document.querySelector('.c-sim-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        showToast('Cotización cargada en el simulador sin modificarla', 'success');
+    } catch (error) {
+        showToast(error.message || 'No se pudo iniciar la simulación', 'error');
+    }
+}
+
+function setupImportQuoteInteractions() {
+    const list = document.getElementById('import-quotes-list');
+    const search = document.getElementById('import-quotes-search');
+    const company = document.getElementById('import-quotes-company-filter');
+    const plan = document.getElementById('import-quotes-plan-filter');
+    const sort = document.getElementById('import-quotes-sort');
+    const more = document.getElementById('import-quotes-load-more');
+    if (!list || list.dataset.bound === '1') return;
+    list.dataset.bound = '1';
+    list.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-quote-action]');
+        if (!button) return;
+        const action = button.dataset.quoteAction;
+        const id = button.dataset.quoteId;
+        if (action === 'toggle') await toggleImportQuoteDetail(id);
+        else if (action === 'retry-detail') await retryImportQuoteDetail(id);
+        else if (action === 'simulate') await simularVentaDesdeCotizacion(id);
+        else if (action === 'edit') await abrirPanelEdicionCotizacionImport(id);
+        else if (action === 'image') await exportQuoteImage(id);
+        else if (action === 'delete') await eliminarCotizacionImport(id);
+        else if (action === 'reload') await cargarCotizacionesImport();
+    });
+    search?.addEventListener('input', () => {
+        clearTimeout(importQuotesSearchTimer);
+        importQuotesSearchTimer = setTimeout(() => cargarCotizacionesImport(), 300);
+    });
+    [company, plan, sort].forEach((control) => {
+        control?.addEventListener('change', () => cargarCotizacionesImport());
+    });
+    more?.addEventListener('click', cargarMasCotizacionesImport);
+}
+
 async function guardarCotizacionImport() {
     if (!currentUser) { redirectToLogin(); return; }
     const nameEl   = document.getElementById('import-quote-name');
@@ -2281,7 +2567,6 @@ async function guardarCotizacionImport() {
         if (nameEl) nameEl.value = '';
         if (linkEl) linkEl.value = '';
         if (salePriceEl) salePriceEl.value = '';
-        if (j.id) importQuotesExpandedIds.add(String(j.id));
         await cargarCotizacionesImport();
         showToast('Cotización guardada', 'success');
     } catch (e) { console.error(e); showToast('Error guardando cotización.', 'error'); }
@@ -2291,18 +2576,13 @@ async function verCotizacionImport(id) {
     const el = document.getElementById('import-quotes-detail');
     if (!el) return;
     try {
-        const r = await authFetch(`/api/import-quotes/${encodeURIComponent(id)}`);
-        const j = await r.json();
-        const record = j?.quote;
+        const record = await fetchImportQuoteDetail(id);
         if (!record) { showToast('Cotización no encontrada.', 'error'); return; }
         const q = record.quote || {};
 
         importCurrentQuote   = q;
         importCurrentQuoteId = String(id);
         importCurrentQuoteName = record.name || '';
-
-        importQuoteDetailCache.set(String(id), record);
-
         document.getElementById('import-quote-detail-title').innerText = record.name || '-';
         document.getElementById('import-quote-detail-date').innerText  = record.createdAt ? new Date(record.createdAt).toLocaleString('es-VE') : '-';
 
@@ -2629,7 +2909,7 @@ async function eliminarCotizacionImport(quoteId) {
         if (r.status === 401) return;
         const j = await r.json();
         if (!r.ok || !j.success) { showToast(j?.message || 'Error al eliminar.', 'error'); return; }
-        importQuotesExpandedIds.delete(id);
+        if (importExpandedQuoteId === id) importExpandedQuoteId = null;
         importQuoteDetailCache.delete(id);
         cerrarDetalleCotizacionImport();
         await cargarCotizacionesImport();
@@ -2884,6 +3164,7 @@ async function shareRatesImage() {
     await checkAuth();
     try { await refresh(); } catch (e) { console.error('Init refresh:', e); }
     try { await loadStats(); } catch (e) { console.error('Init stats:', e); }
+    setupImportQuoteInteractions();
     try { await cargarCotizacionesImport(); } catch (e) { console.error('Init quotes:', e); }
     resetHorizontalScroll();
     connectWS();
