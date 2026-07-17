@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:43:00Z  
+Última actualización: 2026-07-17T08:52:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 6 — Login DAYZO
+Fase actual: 7 — Tasas y frescura
 
 ## Estados
 
@@ -20,8 +20,8 @@ Fase actual: 6 — Login DAYZO
 - [x] Fase 3 — API/lista de cotizaciones
 - [x] Fase 4 — UX cotizaciones
 - [x] Fase 5 — Simulador
-- [~] Fase 6 — Login DAYZO
-- [ ] Fase 7 — Tasas y frescura
+- [x] Fase 6 — Login DAYZO
+- [~] Fase 7 — Tasas y frescura
 - [ ] Fase 8 — Modularización/performance/CSP
 - [ ] Fase 9 — VPS 1 GB
 - [ ] Fase 10 — Cierre web
@@ -301,3 +301,43 @@ Fase actual: 6 — Login DAYZO
 - Prueba manual: CTA desde cotización desplaza al simulador, precarga precio y muestra costos congelados; cancelar vuelve a fuente actual.
 - Riesgo/rollback: revertir F5 conserva CTA F4 con simulador clásico; DB no requiere rollback.
 - Siguiente tarea exacta: Fase 6, extraer auth CSS/JS, rediseñar identidad DAYZO y ampliar E2E/a11y.
+
+## Fase 6 — Login DAYZO
+
+- ID: F6-01 / identidad y separación
+- Estado: [x] COMPLETADO
+- Archivos: `public/login.html`, `public/css/auth.css`, `public/js/auth.js`, `public/service-worker.js`.
+- Evidencia: HTML reducido de 33,272 a 9,041 bytes; cero `<style>`/script inline/handlers; layout dividido desktop y columna móvil; propuesta “Costos reales para importar y vender en Venezuela”; preview honesto de cotización con inversión/costo/venta/ganancia.
+- Comandos: sintaxis, capturas 390/360/1440 y Lighthouse.
+- Resultado: identidad propia sin CDN de iconos/fuentes en login; autocomplete preservado; no se ofrece recuperación falsa.
+- Riesgo/rollback: fuentes caen a sistema/serif local de `styles.css`; no dependencia externa nueva.
+- Pendiente siguiente: accesibilidad y seguridad de redirección.
+
+- ID: F6-02 / formulario accesible
+- Estado: [x] COMPLETADO
+- Archivos: `public/login.html`, `public/css/auth.css`, `public/js/auth.js`, `test/unit/auth-utils.test.js`.
+- Evidencia: targets >=44 px, focus visible, errores por campo, `aria-live`, foco al banner, tabs con flechas, reduced motion y password toggle. `safeNextPath` valida origen/ruta y rechaza `//`, URL externa y backslash.
+- Comandos: `npm test`.
+- Resultado: 3 vectores auth nuevos; 22 unit totales verdes.
+- Riesgo/rollback: sin recuperación de contraseña por decisión fail-closed; requiere token one-time/email real en fase separada.
+- Pendiente siguiente: E2E.
+
+- ID: F6-03 / auth E2E
+- Estado: [x] COMPLETADO
+- Archivos: `test/e2e/auth.spec.js`.
+- Evidencia: registro inválido/válido, login inválido/válido, logout, rate limit, next seguro, foco y layout 390/1440.
+- Comandos: `npm run test:e2e`.
+- Resultado: 3 E2E verdes (2 auth + cotizaciones); rate limit retorna `RATE_LIMITED`.
+- Riesgo/rollback: DB y cuentas E2E viven en `.tmp/` ignorado.
+- Pendiente siguiente: gate visual.
+
+- ID: F6-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: login, auth CSS/JS, tests, SW, capturas `artifacts/phase6`, tracker.
+- Resumen git diff: login reemplazado por shell DAYZO responsive y lógica auth modular/testeable.
+- Comandos exactos: `npm run check`; `npm run test:e2e`; `CAPTURE_LABEL=phase6 node scripts/capture-baseline.js`.
+- Resultado: 22 unit + 3 integration + 3 E2E verdes. Lighthouse login 98 performance, 100 accesibilidad, 96 buenas prácticas, 100 SEO; baseline 87/95/100/100. Un `NO_LCP` transitorio se hizo explícitamente reintentable y el segundo run quedó medible/verde.
+- Pruebas manuales: capturas 1440/390/360, sin overflow; preview y formulario legibles; foco inicial correcto.
+- Métricas: login HTML −72.8%; RSS 86 MB en captura; sin dependencia runtime.
+- Riesgo/rollback: revertir F6 restaura login anterior; backend auth no cambia.
+- Siguiente tarea exacta: Fase 7, fuente CNY dinámica, estados de intento/éxito/stale, scheduler sin solapamiento y TLS estricto.

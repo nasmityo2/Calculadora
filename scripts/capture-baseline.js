@@ -148,18 +148,22 @@ async function captureLighthouse() {
     const chrome = await chromeLauncher.launch({ chromeFlags: ['--headless', '--no-sandbox'] });
     try {
       let result;
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
         result = await lighthouse(`${BASE_URL}${pathname}`, {
           port: chrome.port,
           output: 'json',
           logLevel: 'error',
           onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
         });
-        if (!result.lhr.runtimeError) break;
-        if (attempt < 2) await sleep(750);
+        const lcpErrored = result.lhr.audits?.['largest-contentful-paint']?.scoreDisplayMode === 'error';
+        if (!result.lhr.runtimeError && !lcpErrored) break;
+        if (attempt < 3) await sleep(750);
       }
       if (result.lhr.runtimeError) {
         throw new Error(`Lighthouse ${name}: ${result.lhr.runtimeError.code}`);
+      }
+      if (result.lhr.audits?.['largest-contentful-paint']?.scoreDisplayMode === 'error') {
+        throw new Error(`Lighthouse ${name}: LCP no pudo medirse después de 3 intentos`);
       }
       fs.writeFileSync(path.join(OUT_DIR, `lighthouse-${name}.json`), result.report);
       scores[name] = Object.fromEntries(
