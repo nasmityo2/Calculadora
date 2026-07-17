@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T09:23:00Z  
+Última actualización: 2026-07-17T09:29:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 10 — Cierre web
+Fase actual: cierre local completo — gates remotos bloqueados
 
 ## Estados
 
@@ -24,8 +24,8 @@ Fase actual: 10 — Cierre web
 - [x] Fase 7 — Tasas y frescura
 - [x] Fase 8 — Modularización/performance/CSP
 - [x] Fase 9 — VPS 1 GB (preparación local; ejecución VPS bloqueada)
-- [~] Fase 10 — Cierre web
-- [ ] Fase 11 — Mobile, después del gate web
+- [!] Fase 10 — Cierre web (local verde; deploy/observación bloqueados)
+- [!] Fase 11 — Mobile (bloqueado por orden hasta gate web remoto)
 
 ## Fase 0 — Baseline, respaldo y mapa
 
@@ -470,3 +470,55 @@ Fase actual: 10 — Cierre web
 - Comandos exactos: backup/restore, preflight success/failure, PM2 production smoke, tests de health.
 - Resultado: controles ejecutables locales verdes; operación remota aislada en F9-EXT.
 - Siguiente tarea exacta: Fase 10, suite completa, auditoría final web y artefacto de deploy.
+
+## Fase 10 — Cierre web
+
+- ID: F10-01 / suite limpia y seguridad
+- Estado: [x] COMPLETADO
+- Archivos: todo el árbol web/backend, lockfile y tests.
+- Evidencia: `npm ci` limpio; 31 unit, 3 integration y 3 E2E; audit 0; build CSS; búsqueda sin fallbacks `admin123`, CDNs o handlers.
+- Comandos: `npm ci`; `npm run check`; `npm run test:e2e`; `npm audit --audit-level=moderate`.
+- Resultado: todos los checks ejecutables verdes.
+- Riesgo/rollback: commits pequeños por fase permiten volver al último gate.
+- Pendiente siguiente: producción-only.
+
+- ID: F10-02 / instalación y smoke producción
+- Estado: [x] COMPLETADO
+- Archivos: `scripts/smoke-production.js`, package scripts.
+- Evidencia: `npm ci --omit=dev`: 136 paquetes, 0 vulnerabilidades; servidor production con bootstrap efímero, bind 127.0.0.1, health ready, CSP ok y 76 MB RSS; después se restauró instalación dev con `npm ci`.
+- Resultado: artefacto runtime no depende de Playwright/Tailwind/PM2 dev para arrancar; CSS ya está compilado.
+- Riesgo/rollback: BCV estricto puede estar degraded sin afectar readiness DB/web.
+- Pendiente siguiente: métricas finales.
+
+- ID: F10-03 / visual, performance y regresión
+- Estado: [x] COMPLETADO
+- Archivos: `artifacts/phase10`, `docs/INFORME-FINAL-DAYZO.md`.
+- Evidencia: capturas 1440/390/360, cero overflow; Lighthouse login 100/100/100/100 y app 82/100/96/100; payload/DOM y memoria documentados.
+- Resultado: WEB APROBADA LOCALMENTE PARA DESPLEGAR.
+- Riesgo/rollback: buenas prácticas app 96 se debe al contexto HTTP local/development; producción HTTPS debe revalidarse.
+- Pendiente siguiente: deploy remoto.
+
+- ID: F10-EXT / deploy y observación
+- Estado: [!] BLOQUEADO
+- Bloqueo concreto: sin acceso autorizado a VPS/DNS/Certbot no se pueden ejecutar deploy, UFW/Nginx/systemd, rollback real, off-site ni observación 30–60 min.
+- Preparado: `deploy/`, runbook y comandos exactos; rollback automático.
+- Criterio pendiente: health público/interno, flujo manual, logs 5xx/WS/fuentes, RSS/swap y backup off-site.
+- Resultado: **WEB NO se marca APROBADA EN PRODUCCIÓN** hasta obtener esa evidencia.
+- Siguiente tarea exacta: ejecutar `deploy/deploy.sh`, observar y registrar; solo entonces desbloquear F11.
+
+## Fase 11 — Mobile
+
+- ID: F11-GATE / orden web primero
+- Estado: [!] BLOQUEADO
+- Motivo: el mandato prohíbe modificar `mobile/` antes del gate web completo; F10-EXT sigue abierto.
+- Hallazgos reconfirmados: IDs `int`/`int.parse` frente a UUID String; CNY 6.53; contrato de lista antiguo; release usa firma debug sin keystore.
+- Herramientas: Flutter/Dart/Android SDK no están disponibles en esta máquina; tampoco existe keystore real.
+- Archivos modificados: ninguno en `mobile/`.
+- Riesgo/rollback: avanzar ahora violaría el orden y produciría una app no verificable.
+- Siguiente tarea exacta tras desbloqueo: cambiar UUID a String en todo el flujo, adaptar API/CNY/UI, exigir keystore y ejecutar analyze/test/APK debug/dispositivos.
+
+## Cierre
+
+- Informe único: `docs/INFORME-FINAL-DAYZO.md`.
+- Web local: verde.
+- Producción y mobile: bloqueos externos/orden explícitos, aislados y con instrucciones.
