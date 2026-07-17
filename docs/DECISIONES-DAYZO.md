@@ -67,3 +67,13 @@
 - Decisión: iniciar con heap V8 320 MB y `max_memory_restart` 350 MB, una instancia, cache SQLite 8 MB. Ajustar solo con observación real.
 - Evidencia: baseline local ~76.5 MB RSS bajo PM2; no sustituye medición de 24 h en VPS.
 - Riesgo/rollback: picos no observados localmente; rollback a límites previos mientras se investiga, sin aumentar instancias.
+
+## ADR-009 — Contrato canónico y frescura de tasas
+
+- Estado: aceptada.
+- Decisión: exponer `p2pBuyVesPerUsdt` y `p2pSellVesPerUsdt`, manteniendo `binance`/`binance_compra` como aliases legacy. `cny` significa CNY por USD y se deriva de las publicaciones BCV `USD_VES / CNY_VES`.
+- Frescura: cada fuente expone `lastAttemptAt`, `lastSuccessAt`, `status`, `stale` y fallos consecutivos. Un intento fallido nunca avanza la fecha de éxito; el último valor cacheado puede mostrarse como degraded/stale.
+- Red: BCV usa TLS estricto por defecto. El fallback sin validación de certificado requiere `BCV_TLS_FALLBACK=1`, ocurre solo después del intento estricto, se registra sin contenido y pasa el mismo parser/rangos/validación de salto.
+- Scheduling: Binance usa un solo ciclo recursivo con lock, backoff exponencial y jitter; no `setInterval`.
+- Compatibilidad: aliases y `last_update` permanecen durante web/mobile v1. Clientes nuevos usan nombres canónicos y estados de fuente.
+- Riesgo/rollback: saltos mayores al 50% se rechazan y conservan cache; ante redenominación real se ajusta el umbral mediante cambio revisado, no desactivando validación.

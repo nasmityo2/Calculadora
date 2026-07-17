@@ -18,6 +18,7 @@ const SQLiteSessionStore = require('./sqlite-session-store');
 const V = require('./validators');
 const BcvVigencia = require('./bcv-vigencia');
 const ImportCalculation = require('./domain/import-calculation');
+const RateSources = require('./rates/rate-sources');
 
 // ─── SECCIÓN: LOGGER MÍNIMO ─────────────────────────────────────────────────
 // Sin winston/pino: ahorra RAM. Nunca loguear contraseñas ni tokens.
@@ -870,15 +871,40 @@ let CACHE_TASAS = {
   bcv_meta: null,
   lastUpdateBinance: null, lastUpdateBCV: null, lastUpdateTasas: null,
 };
+const RATE_SOURCE_STATE = {
+  binance: { lastAttemptAt: null, lastSuccessAt: null, consecutiveFailures: 0 },
+  bcv: { lastAttemptAt: null, lastSuccessAt: null, consecutiveFailures: 0 },
+};
+let binanceInFlight = false;
+let bcvInFlight = false;
+let ratesStopping = false;
 
 const ultimoRegistro = stmtLast.get();
 if (ultimoRegistro) {
   CACHE_TASAS.binance        = ultimoRegistro.binance        || 0;
   CACHE_TASAS.binance_compra = ultimoRegistro.binance_compra || 0;
   CACHE_TASAS.bcv_publicada  = ultimoRegistro.bcv            || 0;
+  const cachedAt = new Date(ultimoRegistro.timestamp).toISOString();
+  if (CACHE_TASAS.binance > 0) RATE_SOURCE_STATE.binance.lastSuccessAt = cachedAt;
+  if (CACHE_TASAS.bcv_publicada > 0) RATE_SOURCE_STATE.bcv.lastSuccessAt = cachedAt;
 }
 backfillPublicacionesBcv();
 resolveAndCacheBcv();
+
+function getRateSourceStatus() {
+  return {
+    binance: RateSources.sourceStatus({
+      ...RATE_SOURCE_STATE.binance,
+      failures: RATE_SOURCE_STATE.binance.consecutiveFailures,
+      staleAfterMs: 2 * 60 * 1000,
+    }),
+    bcv: RateSources.sourceStatus({
+      ...RATE_SOURCE_STATE.bcv,
+      failures: RATE_SOURCE_STATE.bcv.consecutiveFailures,
+      staleAfterMs: 24 * 60 * 60 * 1000,
+    }),
+  };
+}
 
 // ─── SECCIÓN: HELPERS DE COTIZACIONES ───────────────────────────────────────
 
@@ -1097,62 +1123,64 @@ async function withRetry(fn, { attempts = 3, baseDelay = 2000 } = {}) {
   throw lastErr;
 }
 
-/**
- * Lee bcv.org.ve una sola vez y extrae USD, CNY y la «Fecha Valor» oficial
- * (día en que la tasa mostrada rige). Devuelve 0/null en lo que no se pudo.
- */
 async function getBCVData() {
-  const out = { usd: 0, cny: 0, fechaValor: null };
+  const requestConfig = {
+    timeout: 20000,
+    maxContentLength: 2 * 1024 * 1024,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; DAYZO-Rates/1.0)',
+      'Accept-Language': 'es-VE,es;q=0.9',
+    },
+  };
+  let response;
   try {
-    const { data } = await axios.get('https://www.bcv.org.ve/', {
-      // La cadena SSL del BCV tiene problemas conocidos; rejectUnauthorized:false
-      // es un trade-off conocido — monitorear cambios de certificado.
+    // TLS estricto es siempre el primer intento.
+    response = await axios.get('https://www.bcv.org.ve/', requestConfig);
+  } catch (strictError) {
+    if (process.env.BCV_TLS_FALLBACK !== '1') throw strictError;
+    log.warn(`BCV_TLS_FALLBACK activo tras fallo TLS (${strictError.code || strictError.name}).`);
+    response = await axios.get('https://www.bcv.org.ve/', {
+      ...requestConfig,
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-      timeout: 20000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'es-VE,es;q=0.9',
-      },
     });
-
-    const dolarBlock = data.match(/id=["']dolar["'][^]*?(?=id=["'](?:euro|yuan|lira|rublo)|<div class="pull-right)/i);
-    const block      = dolarBlock ? dolarBlock[0] : data;
-
-    const valueMatch = block.match(/<strong[^>]*>\s*([\d]+[,.][\d]+)\s*<\/strong>/);
-    if (valueMatch) {
-      const parsed = parseFloat(valueMatch[1].replace(',', '.'));
-      if (Number.isFinite(parsed) && parsed > 0) out.usd = parsed;
-    }
-    if (!(out.usd > 0)) {
-      const candidates = [...data.matchAll(/<strong[^>]*>\s*(\d{2,4}[,.]\d{2,})\s*<\/strong>/g)];
-      for (const m of candidates) {
-        const num = parseFloat(m[1].replace(',', '.'));
-        if (Number.isFinite(num) && num > 10) { log.warn(`BCV USD (fallback): ${num}`); out.usd = num; break; }
-      }
-    }
-
-    const yuanBlock = data.match(/id=["']yuan["'][^]*?(?=id=["'](?:dolar|euro|lira|rublo)|<div class="pull-right)/i);
-    if (yuanBlock) {
-      const m = yuanBlock[0].match(/<strong[^>]*>\s*([\d]+[,.][\d]+)\s*<\/strong>/);
-      if (m) {
-        const parsed = parseFloat(m[1].replace(',', '.'));
-        if (Number.isFinite(parsed) && parsed > 0) out.cny = parsed;
-      }
-    }
-
-    // «Fecha Valor: <span ... content="2026-07-02T00:00:00-04:00">»
-    const fvMatch = data.match(/Fecha\s*Valor:?\s*<span[^>]*content="(\d{4}-\d{2}-\d{2})/i);
-    if (fvMatch) out.fechaValor = fvMatch[1];
-
-    if (out.usd > 0) {
-      log.info(`BCV USD: ${out.usd}${out.fechaValor ? ` (fecha valor ${out.fechaValor})` : ''}`);
-    } else {
-      log.error('BCV: no se pudo extraer el USD');
-    }
-  } catch (e) {
-    log.error('Error BCV:', e.message);
   }
-  return out;
+
+  const parsed = RateSources.parseBcvHtml(response.data);
+  if (!parsed.ok) {
+    const extractionError = new Error(parsed.error.message);
+    extractionError.code = parsed.error.code;
+    throw extractionError;
+  }
+  const usd = RateSources.validateRate(parsed.value.usd, {
+    min: 10,
+    max: 100_000,
+    previous: CACHE_TASAS.bcv_publicada,
+    maxChangeRatio: 0.5,
+  });
+  if (!usd.ok) {
+    const validationError = new Error(`Tasa USD BCV rechazada: ${usd.code}`);
+    validationError.code = usd.code;
+    throw validationError;
+  }
+
+  let cnyPerUsd = null;
+  if (parsed.value.cny > 0) {
+    const derived = usd.value / parsed.value.cny;
+    const cny = RateSources.validateRate(derived, {
+      min: 1,
+      max: 20,
+      previous: CACHE_TASAS.cny,
+      maxChangeRatio: 0.5,
+    });
+    if (cny.ok) cnyPerUsd = cny.value;
+    else log.warn(`BCV CNY/USD rechazado: ${cny.code}`);
+  }
+
+  return {
+    usd: usd.value,
+    cny: cnyPerUsd,
+    fechaValor: parsed.value.fechaValor,
+  };
 }
 
 async function getBinanceRate(tradeType) {
@@ -1176,50 +1204,83 @@ async function getBinanceRate(tradeType) {
 }
 
 async function updateBinance() {
+  if (binanceInFlight) return false;
+  binanceInFlight = true;
+  RATE_SOURCE_STATE.binance.lastAttemptAt = new Date().toISOString();
   // A las 00:00 (Caracas) la tasa publicada la víspera entra en vigencia:
-  // este guard corre cada tick (~10 s) y rota la vigente al instante.
+  // este guard corre en cada ciclo y rota la vigente al instante.
   try { checkRolloverVigenciaBcv(); } catch (e) { log.error('rollover BCV:', e.message); }
   try {
     const [comprar, vender] = await Promise.all([
       withRetry(() => getBinanceRate('BUY'),  { attempts: 3, baseDelay: 3000 }),
       withRetry(() => getBinanceRate('SELL'), { attempts: 3, baseDelay: 3000 }),
     ]);
+    const buy = RateSources.validateRate(comprar, {
+      min: 1, max: 1_000_000, previous: CACHE_TASAS.binance, maxChangeRatio: 0.5,
+    });
+    const sell = RateSources.validateRate(vender, {
+      min: 1, max: 1_000_000, previous: CACHE_TASAS.binance_compra, maxChangeRatio: 0.5,
+    });
     let changed = false;
-    if (comprar > 0) { CACHE_TASAS.binance        = comprar; changed = true; }
-    if (vender  > 0) { CACHE_TASAS.binance_compra = vender;  changed = true; }
-    if (changed) {
-      CACHE_TASAS.lastUpdateBinance = new Date();
-      CACHE_TASAS.lastUpdateTasas   = CACHE_TASAS.lastUpdateBinance;
-      guardarHistorialSiCambio({
-        ...CACHE_TASAS,
-        bcv: CACHE_TASAS.bcv_publicada || CACHE_TASAS.bcv,
-      });
-      broadcastTasas();
+    if (buy.ok) { CACHE_TASAS.binance = buy.value; changed = true; }
+    if (sell.ok) { CACHE_TASAS.binance_compra = sell.value; changed = true; }
+    if (!changed) {
+      const invalid = new Error(`Binance rechazado: BUY=${buy.code || 'ok'} SELL=${sell.code || 'ok'}`);
+      invalid.code = 'BINANCE_INVALID_RATES';
+      throw invalid;
     }
-  } catch (e) { log.error('updateBinance fallido:', e.message); }
-}
-
-async function updateOficiales() {
-  try {
-    const datos = await getBCVData();
-    const now   = Date.now();
-    if (datos.usd > 0) {
-      CACHE_TASAS.bcv_publicada = datos.usd;
-      // Registrar la publicación con su fecha valor REAL (la que dice el BCV)
-      if (datos.fechaValor) {
-        upsertPublicacionBcv({ fechaValor: datos.fechaValor, bcv: datos.usd, ts: now });
-      }
-    }
-    if (datos.cny > 0) CACHE_TASAS.cny = datos.cny;
-    resolveAndCacheBcv();
-    CACHE_TASAS.lastUpdateBCV   = new Date();
-    CACHE_TASAS.lastUpdateTasas = CACHE_TASAS.lastUpdateBCV;
+    const successAt = new Date().toISOString();
+    RATE_SOURCE_STATE.binance.lastSuccessAt = successAt;
+    RATE_SOURCE_STATE.binance.consecutiveFailures = 0;
+    CACHE_TASAS.lastUpdateBinance = successAt;
+    CACHE_TASAS.lastUpdateTasas = successAt;
     guardarHistorialSiCambio({
       ...CACHE_TASAS,
       bcv: CACHE_TASAS.bcv_publicada || CACHE_TASAS.bcv,
     });
     broadcastTasas();
-  } catch (e) { log.error('updateOficiales error:', e.message); }
+    return true;
+  } catch (e) {
+    RATE_SOURCE_STATE.binance.consecutiveFailures += 1;
+    log.error(`updateBinance fallido: ${e.code || e.name || 'ERROR'}`);
+    return false;
+  } finally {
+    binanceInFlight = false;
+  }
+}
+
+async function updateOficiales() {
+  if (bcvInFlight) return false;
+  bcvInFlight = true;
+  RATE_SOURCE_STATE.bcv.lastAttemptAt = new Date().toISOString();
+  try {
+    const datos = await getBCVData();
+    const now   = Date.now();
+    CACHE_TASAS.bcv_publicada = datos.usd;
+    // Registrar la publicación con su fecha valor REAL (la que dice el BCV)
+    if (datos.fechaValor) {
+      upsertPublicacionBcv({ fechaValor: datos.fechaValor, bcv: datos.usd, ts: now });
+    }
+    if (datos.cny > 0) CACHE_TASAS.cny = datos.cny;
+    resolveAndCacheBcv();
+    const successAt = new Date().toISOString();
+    RATE_SOURCE_STATE.bcv.lastSuccessAt = successAt;
+    RATE_SOURCE_STATE.bcv.consecutiveFailures = 0;
+    CACHE_TASAS.lastUpdateBCV = successAt;
+    CACHE_TASAS.lastUpdateTasas = successAt;
+    guardarHistorialSiCambio({
+      ...CACHE_TASAS,
+      bcv: CACHE_TASAS.bcv_publicada || CACHE_TASAS.bcv,
+    });
+    broadcastTasas();
+    return true;
+  } catch (e) {
+    RATE_SOURCE_STATE.bcv.consecutiveFailures += 1;
+    log.error(`updateOficiales fallido: ${e.code || e.name || 'ERROR'}`);
+    return false;
+  } finally {
+    bcvInFlight = false;
+  }
 }
 
 // ─── SECCIÓN: PÁGINAS ───────────────────────────────────────────────────────
@@ -1258,12 +1319,13 @@ app.get('/health', requireAuth, requireAdmin, (req, res) => {
     sesionesActivas: sessionStore.countActive(),
     wsClients:       wssTasas?.clients?.size ?? 0,
     timers: {
-      binance:   !!intervalBinance,
+      binance:   !!timerBinance,
       oficiales: !!intervalOficiales,
     },
     fuentes: {
       lastUpdateBinance: CACHE_TASAS.lastUpdateBinance,
       lastUpdateBCV:     CACHE_TASAS.lastUpdateBCV,
+      sourceStatus: getRateSourceStatus(),
     },
     cache: {
       binance: CACHE_TASAS.binance, binance_compra: CACHE_TASAS.binance_compra,
@@ -1463,6 +1525,7 @@ app.delete('/api/auth/users/:id', requireAuth, requireAdmin, (req, res) => {
 app.get('/api/tasas-venezuela', tasasLimiter, (req, res, next) => {
   try {
     const { binance, binance_compra, bcv, bcv_publicada, cny, bcv_meta } = CACHE_TASAS;
+    const sourceStatus = getRateSourceStatus();
     const diff_bs  = binance - bcv;
     const diff_pct = bcv > 0 ? (diff_bs / bcv) * 100 : 0;
     const ahora    = new Date().toLocaleString('es-VE', {
@@ -1479,7 +1542,7 @@ app.get('/api/tasas-venezuela', tasasLimiter, (req, res, next) => {
 
     const historialFiltrado = queryHistorial({ range, fecha: fechaParam, limit });
 
-    let last_update = ahora;
+    let last_update = null;
     const lastT = CACHE_TASAS.lastUpdateTasas || CACHE_TASAS.lastUpdateBinance || CACHE_TASAS.lastUpdateBCV;
     if (lastT) {
       last_update = new Date(lastT).toLocaleString('es-VE', {
@@ -1495,8 +1558,28 @@ app.get('/api/tasas-venezuela', tasasLimiter, (req, res, next) => {
     const rango    = { start: rangoRow?.s ?? null, end: rangoRow?.e ?? null };
 
     res.json({
-      tasas: { binance, binance_compra, bcv, bcv_publicada, cny },
+      tasas: {
+        p2pBuyVesPerUsdt: binance,
+        p2pSellVesPerUsdt: binance_compra,
+        binance,
+        binance_compra,
+        bcv,
+        bcv_publicada,
+        cny,
+      },
       bcv_meta,
+      sourceStatus: {
+        ...sourceStatus,
+        stale: sourceStatus.binance.stale || sourceStatus.bcv.stale,
+      },
+      lastAttemptAt: {
+        binance: sourceStatus.binance.lastAttemptAt,
+        bcv: sourceStatus.bcv.lastAttemptAt,
+      },
+      lastSuccessAt: {
+        binance: sourceStatus.binance.lastSuccessAt,
+        bcv: sourceStatus.bcv.lastSuccessAt,
+      },
       diff_bs, diff_pct, fecha: ahora, last_update,
       historial: historialFiltrado, rango, chartStats,
     });
@@ -1685,17 +1768,38 @@ server.on('upgrade', (request, socket, head) => {
 
 function broadcastTasas() {
   const { binance, binance_compra, bcv, bcv_publicada, cny, bcv_meta } = CACHE_TASAS;
+  const sourceStatus = getRateSourceStatus();
   const diff_bs     = binance - bcv;
   const diff_pct    = bcv > 0 ? (diff_bs / bcv) * 100 : 0;
   const lastT       = CACHE_TASAS.lastUpdateTasas || CACHE_TASAS.lastUpdateBinance || CACHE_TASAS.lastUpdateBCV;
   const last_update = lastT
     ? new Date(lastT).toLocaleString('es-VE', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-    : new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+    : null;
   const payload = JSON.stringify({
     type: 'tasas_update',
     data: {
-      tasas: { binance, binance_compra, bcv, bcv_publicada, cny },
+      tasas: {
+        p2pBuyVesPerUsdt: binance,
+        p2pSellVesPerUsdt: binance_compra,
+        binance,
+        binance_compra,
+        bcv,
+        bcv_publicada,
+        cny,
+      },
       bcv_meta,
+      sourceStatus: {
+        ...sourceStatus,
+        stale: sourceStatus.binance.stale || sourceStatus.bcv.stale,
+      },
+      lastAttemptAt: {
+        binance: sourceStatus.binance.lastAttemptAt,
+        bcv: sourceStatus.bcv.lastAttemptAt,
+      },
+      lastSuccessAt: {
+        binance: sourceStatus.binance.lastSuccessAt,
+        bcv: sourceStatus.bcv.lastSuccessAt,
+      },
       diff_bs, diff_pct,
       fecha: new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' }),
       last_update,
@@ -1706,12 +1810,24 @@ function broadcastTasas() {
 
 // ─── SECCIÓN: ARRANQUE ──────────────────────────────────────────────────────
 
-const intervalBinance   = setInterval(updateBinance,   10 * 1000);
+let timerBinance = null;
+async function runBinanceCycle() {
+  if (ratesStopping) return;
+  await updateBinance();
+  if (ratesStopping) return;
+  const delay = RateSources.backoffDelay({
+    baseMs: 10 * 1000,
+    failureCount: RATE_SOURCE_STATE.binance.consecutiveFailures,
+    maxMs: 2 * 60 * 1000,
+  });
+  timerBinance = setTimeout(runBinanceCycle, delay);
+  timerBinance.unref?.();
+}
 // Cada 15 min: detecta pronto la publicación vespertina del BCV (~4-5 PM VET)
 const intervalOficiales = setInterval(updateOficiales, 15 * 60 * 1000);
 
 updateOficiales();
-updateBinance();
+runBinanceCycle();
 
 // Un fallo al enlazar el puerto es fatal: salir para que PM2 reinicie limpio.
 server.on('error', (err) => {
@@ -1745,9 +1861,10 @@ let shuttingDown = false;
 function shutdown(signal, exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
+  ratesStopping = true;
   log.info(`[${signal}] Cerrando servidor…`);
 
-  clearInterval(intervalBinance);
+  clearTimeout(timerBinance);
   clearInterval(intervalOficiales);
 
   // Avisar a los clientes WS antes de cerrar, luego terminarlos.

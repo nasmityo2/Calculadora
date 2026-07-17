@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:52:00Z  
+Última actualización: 2026-07-17T09:00:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 7 — Tasas y frescura
+Fase actual: 8 — Modularización/performance/CSP
 
 ## Estados
 
@@ -21,8 +21,8 @@ Fase actual: 7 — Tasas y frescura
 - [x] Fase 4 — UX cotizaciones
 - [x] Fase 5 — Simulador
 - [x] Fase 6 — Login DAYZO
-- [~] Fase 7 — Tasas y frescura
-- [ ] Fase 8 — Modularización/performance/CSP
+- [x] Fase 7 — Tasas y frescura
+- [~] Fase 8 — Modularización/performance/CSP
 - [ ] Fase 9 — VPS 1 GB
 - [ ] Fase 10 — Cierre web
 - [ ] Fase 11 — Mobile, después del gate web
@@ -341,3 +341,50 @@ Fase actual: 7 — Tasas y frescura
 - Métricas: login HTML −72.8%; RSS 86 MB en captura; sin dependencia runtime.
 - Riesgo/rollback: revertir F6 restaura login anterior; backend auth no cambia.
 - Siguiente tarea exacta: Fase 7, fuente CNY dinámica, estados de intento/éxito/stale, scheduler sin solapamiento y TLS estricto.
+
+## Fase 7 — Tasas y frescura
+
+- ID: F7-01 / contrato y CNY
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `public/app.js`, `public/index.html`, `docs/DECISIONES-DAYZO.md`, `README.md`.
+- Evidencia: contrato canónico `p2pBuyVesPerUsdt`/`p2pSellVesPerUsdt` con aliases legacy; CNY dinámico calculado como `USD_VES/CNY_VES`; web usa `tasas.cny` en conversión, importación, detalles y simulador. Fallback 6,53 aparece “Estimado”.
+- Comandos: integración inspecciona campos canónicos/legacy y estados.
+- Resultado: no quedan usos de `tasaSegura`; adaptador evita romper clientes anteriores.
+- Riesgo/rollback: mobile usa fallback hasta F11; aliases se conservan hasta migrarlo.
+- Pendiente siguiente: frescura.
+
+- ID: F7-02 / intentos, éxitos y fuentes caídas
+- Estado: [x] COMPLETADO
+- Archivos: `src/rates/rate-sources.js`, `src/server.js`, `test/unit/rate-sources.test.js`.
+- Evidencia: `lastAttemptAt`, `lastSuccessAt`, estado/stale/fallos por Binance y BCV; un error no avanza el éxito. Parser BCV falla cerrado; rangos y salto máximo 50%; cache se reporta degraded/stale.
+- Comandos: 6 tests de parser, salto, stale/cache, backoff y scheduler; E2E ejecutado con BCV TLS caído y UI completa verde.
+- Resultado: 28 unit + 3 integration verdes; captura phase7 conserva app usable y registra `UNABLE_TO_VERIFY_LEAF_SIGNATURE` como fuente degradada, no como éxito.
+- Riesgo/rollback: un cambio monetario extraordinario >50% requiere revisión; no se acepta automáticamente.
+- Pendiente siguiente: scheduler/TLS.
+
+- ID: F7-03 / TLS y scheduler
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `src/rates/rate-sources.js`, `README.md`.
+- Evidencia: TLS estricto primero; fallback solo con `BCV_TLS_FALLBACK=1`, host fijo, tope 2 MB y validación completa. Binance usa lock, ciclo recursivo, backoff+jitter; BCV tiene lock.
+- Comandos: test estático confirma ausencia de `setInterval(updateBinance)` y presencia de lock/backoff; `npm run test:e2e`.
+- Resultado: no hay ciclos Binance solapados; 3 E2E verdes aun con BCV no disponible.
+- Riesgo/rollback: dejar fallback en 0 es preferido; activarlo solo durante incidente documentado.
+- Pendiente siguiente: fecha/UI.
+
+- ID: F7-04 / fecha y estado UI
+- Estado: [x] COMPLETADO
+- Archivos: `public/app.js`, `public/index.html`.
+- Evidencia: `parseHistorialDate` devuelve null y los consumidores filtran/rotulan sin inventar “ahora”; topbar, tarjeta CNY y simulador muestran stale/fallback/último éxito.
+- Resultado: cero timestamps fabricados y cero overflow en phase7.
+- Riesgo/rollback: filas históricas con fecha inválida se omiten visualmente en lugar de ubicarse hoy.
+- Pendiente siguiente: gate.
+
+- ID: F7-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: módulo de fuentes, servidor, web, tests, docs, capturas `artifacts/phase7`.
+- Resumen git diff: contrato canónico, CNY dinámico, estados, TLS, locks y backoff.
+- Comandos exactos: `npm run check`; `npm run test:e2e`; `CAPTURE_LABEL=phase7 CAPTURE_LIGHTHOUSE=0 node scripts/capture-baseline.js`.
+- Resultado: 28 unit + 3 integration + 3 E2E verdes; fuente BCV caída quedó explícitamente degraded; 80 MB RSS.
+- Prueba manual: UI indica CNY estimado y datos stale cuando no existe éxito nuevo.
+- Riesgo/rollback: revertir F7 restaura aliases únicamente, pero reintroduce falsa frescura/TLS débil; no recomendado.
+- Siguiente tarea exacta: Fase 8, retirar renderer/handlers legacy, self-host assets, endurecer CSP y WebSocket.

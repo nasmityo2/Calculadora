@@ -89,7 +89,20 @@ const importQuoteDetailCache = new Map();
 /** Ancla DOM para devolver `#import-quotes-detail` a su sitio original */
 let importQuoteDetailPanelAnchor = null;
 
-const tasaSegura = 6.53;
+const CNY_FALLBACK_RATE = 6.53;
+
+function normalizeRatesContract(rates = {}) {
+    return {
+        ...rates,
+        binance: Number(rates.p2pBuyVesPerUsdt ?? rates.binance) || 0,
+        binance_compra: Number(rates.p2pSellVesPerUsdt ?? rates.binance_compra) || 0,
+        cny: Number(rates.cny) || 0,
+    };
+}
+
+function getCnyRate() {
+    return d.cny > 0 ? d.cny : CNY_FALLBACK_RATE;
+}
 
 // ═══════════════════════════════════════════════
 // TOAST + CONFIRM — reemplazan alert()/confirm() nativos
@@ -305,7 +318,7 @@ function parseLocaleAmount(raw) {
 //   ISO strings
 // ═══════════════════════════════════════════════
 function parseHistorialDate(dateStr) {
-    if (!dateStr) return new Date();
+    if (!dateStr) return null;
     try {
         // Try ISO / timestamp first
         if (/^\d{4}-/.test(dateStr) || /^\d{13}$/.test(String(dateStr))) {
@@ -326,8 +339,8 @@ function parseHistorialDate(dateStr) {
             }
             return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), h, min, sec);
         }
-        return new Date();
-    } catch { return new Date(); }
+        return null;
+    } catch { return null; }
 }
 
 // ═══════════════════════════════════════════════
@@ -348,7 +361,7 @@ function renderHistorial() {
         const hourInt = parseInt(hh, 10);
         filtered = source.filter(x => {
             const dt = x.timestamp ? new Date(x.timestamp) : parseHistorialDate(x.fecha);
-            return dt.getHours() === hourInt;
+            return dt && !isNaN(dt.getTime()) && dt.getHours() === hourInt;
         });
     }
 
@@ -360,6 +373,7 @@ function renderHistorial() {
     const visibleData = filtered.slice(0, historialVisible);
     const listHTML = visibleData.map(x => {
         const dt   = x.timestamp ? new Date(x.timestamp) : parseHistorialDate(x.fecha);
+        if (!dt || isNaN(dt.getTime())) return '';
         const label = dt.toLocaleString('es-VE', {
             day: '2-digit', month: '2-digit', year: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
@@ -388,7 +402,7 @@ function renderHistorial() {
                 </div>
             </div>
         </div>`;
-    }).join('');
+    }).filter(Boolean).join('');
 
     const remaining = filtered.length - historialVisible;
     let moreHTML = '';
@@ -509,8 +523,8 @@ function buildChart(rawData, range) {
     const ctx = canvas.getContext('2d');
 
     let data = [...(rawData || [])].sort((a, b) => {
-        const ta = a.timestamp || parseHistorialDate(a.fecha).getTime();
-        const tb = b.timestamp || parseHistorialDate(b.fecha).getTime();
+        const ta = a.timestamp || parseHistorialDate(a.fecha)?.getTime() || 0;
+        const tb = b.timestamp || parseHistorialDate(b.fecha)?.getTime() || 0;
         return ta - tb;
     });
 
@@ -528,7 +542,7 @@ function buildChart(rawData, range) {
     // Etiquetas según rango: 7D muestra fecha+hora, MES muestra dd/mm HH:00, ALL muestra dd/mm
     const labels = data.map(h => {
         const dt = h.timestamp ? new Date(Number(h.timestamp)) : parseHistorialDate(h.fecha);
-        if (isNaN(dt.getTime())) return '?';
+        if (!dt || isNaN(dt.getTime())) return '?';
         if (range === '7d') {
             // Fecha y hora exacta para rango semanal (un punto por hora)
             return dt.toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -546,7 +560,7 @@ function buildChart(rawData, range) {
 
     const tooltipLabels = data.map(h => {
         const dt = h.timestamp ? new Date(Number(h.timestamp)) : parseHistorialDate(h.fecha);
-        if (isNaN(dt.getTime())) return '?';
+        if (!dt || isNaN(dt.getTime())) return '?';
         return dt.toLocaleString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
     });
 
@@ -777,23 +791,23 @@ function calc() {
         document.getElementById('res2-l').innerText = 'Dólar BCV';
         v2 = bcv > 0 ? v / bcv : 0;
         document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = tr > 0 ? (v / tr) * tasaSegura : 0;
+        v3 = tr > 0 ? (v / tr) * getCnyRate() : 0;
     } else if (m === 'USDT') {
         document.getElementById('res1-l').innerText = 'Bolívares';
         v1 = v * tr;
         document.getElementById('res2-l').innerText = 'Dólar BCV (Ref)';
         v2 = bcv > 0 ? (v * tr) / bcv : 0;
         document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = v * tasaSegura;
+        v3 = v * getCnyRate();
     } else if (m === 'BCV') {
         document.getElementById('res1-l').innerText = 'Bolívares';
         v1 = v * bcv;
         document.getElementById('res2-l').innerText = 'USDT (Ref)';
         v2 = tr > 0 ? (v * bcv) / tr : 0;
         document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = tr > 0 ? ((v * bcv) / tr) * tasaSegura : 0;
+        v3 = tr > 0 ? ((v * bcv) / tr) * getCnyRate() : 0;
     } else if (m === 'CNY') {
-        const u = tasaSegura > 0 ? v / tasaSegura : 0;
+        const u = v / getCnyRate();
         document.getElementById('res1-l').innerText = 'USDT';
         v1 = u;
         document.getElementById('res2-l').innerText = 'Bolívares';
@@ -1038,7 +1052,7 @@ async function refresh() {
         const r = await fetch('/api/tasas-venezuela?range=24h&stats=1');
         const j = await r.json();
 
-        d = j.tasas;
+        d = normalizeRatesContract(j.tasas);
         historialData = j.historial || [];
         chartData     = j.historial || [];
         chartStats    = j.chartStats || null;
@@ -1080,7 +1094,7 @@ function updateUI(j) {
     const t = j && j.tasas;
     if (!t) { refreshImpUnitarioRates(); return; }
     ratesDisplayMeta = {
-        lastUpdate: j.lastSuccessAt || j.last_update || j.fecha || null,
+        lastUpdate: j.lastSuccessAt?.binance || j.last_update || j.fecha || null,
         stale: j.sourceStatus?.stale === true,
         cnyFallback: !(Number(t.cny) > 0),
     };
@@ -1101,7 +1115,7 @@ function updateUI(j) {
             item('Comprar', bBuy) +
             item('Vender', bSell) +
             item('BCV', bBcv) +
-            item('CNY/$', tasaSegura);
+            item('CNY/$', getCnyRate());
         tickerInner.innerHTML =
             '<div class="c-ticker__marquee"><div class="c-ticker__strip">' + rowHtml + '</div>' +
             '<div class="c-ticker__strip" aria-hidden="true">' + rowHtml + '</div></div>';
@@ -1117,7 +1131,12 @@ function updateUI(j) {
     assignRateFieldWithFlash('t-binance', moneyFmt.format(binance), true);
     assignRateFieldWithFlash('t-binance-compra', moneyFmt.format(Number.isFinite(bnCompraRaw) ? bnCompraRaw : 0), true);
     assignRateFieldWithFlash('t-bcv', moneyFmt.format(bcv), true);
-    assignRateFieldWithFlash('t-cny', moneyFmt.format(tasaSegura), true);
+    assignRateFieldWithFlash('t-cny', moneyFmt.format(getCnyRate()), true);
+    const cnyNote = document.getElementById('cny-source-note');
+    if (cnyNote) {
+        cnyNote.textContent = Number(t.cny) > 0 ? 'Dinámica · BCV USD/CNY' : 'Estimada · fallback 6,53';
+        cnyNote.className = 'c-rate-card__delta ' + (Number(t.cny) > 0 ? 'c-rate-card__delta--up' : 'c-rate-card__delta--alert');
+    }
 
     renderBcvVigenciaMeta(j.bcv_meta);
 
@@ -1137,8 +1156,9 @@ function updateUI(j) {
     if (elHist) elHist.innerText = horaTexto;
     const elRates = document.getElementById('current-rates-time');
     if (elRates) {
-        elRates.innerText = horaTexto;
-        elRates.classList.add('text-emerald-400');
+        elRates.innerText = `${ratesDisplayMeta.stale ? 'Datos desactualizados · ' : ''}${horaTexto}`;
+        elRates.classList.toggle('text-emerald-400', !ratesDisplayMeta.stale);
+        elRates.classList.toggle('text-amber-400', ratesDisplayMeta.stale);
         setTimeout(() => elRates.classList.remove('text-emerald-400'), 2000);
     }
 
@@ -1157,7 +1177,7 @@ function connectWS() {
             try {
                 const msg = JSON.parse(e.data);
                 if (msg.type === 'tasas_update') {
-                    d = msg.data.tasas;
+                    d = normalizeRatesContract(msg.data.tasas);
                     const dbs = d.binance - d.bcv;
                     const dp  = d.bcv > 0 ? (dbs / d.bcv) * 100 : 0;
                     updateUI({ ...msg.data, diff_bs: dbs, diff_pct: dp });
@@ -1181,7 +1201,7 @@ function connectWS() {
 // ═══════════════════════════════════════════════
 const GCCARGO_TARIFA_USD = 770;
 
-/** USD → equivalente $ BCV (P2P compra vs tasa BCV del momento) y yuanes (tasaSegura). */
+/** USD → equivalente $ BCV (P2P compra vs tasa BCV) y yuanes (snapshot/fallback visible). */
 function formatCostoUnitarioCurrencies(usd) {
     const u = Number(usd) || 0;
     if (!Number.isFinite(u) || u <= 0) {
@@ -1193,7 +1213,7 @@ function formatCostoUnitarioCurrencies(usd) {
     return {
         usd: usdFmt.format(u),
         bcv: bcvUsd != null ? usdFmt.format(bcvUsd) + ' (BCV)' : '-- (BCV)',
-        cny: '¥' + moneyFmt.format(u * tasaSegura),
+        cny: '¥' + moneyFmt.format(u * getCnyRate()),
     };
 }
 
@@ -1459,7 +1479,7 @@ function calcImport() {
         const l = parseLocaleAmount(dims[0]), w = parseLocaleAmount(dims[1]), h = parseLocaleAmount(dims[2]);
         const pbc = parseLocaleAmount(p[1]);
         const ubc = parseInt(p[2], 10);
-        const pu  = parseLocaleAmount(p[3]) / tasaSegura;
+        const pu  = parseLocaleAmount(p[3]) / getCnyRate();
         const ecbc = p.length >= 5 ? parseLocaleAmount(p[4]) : 0;
         const nc   = p.length >= 6 ? parseInt(p[5], 10) : 1;
 
@@ -1689,7 +1709,7 @@ function updateSimReferenceUI() {
     const binBuy  = Number(d.binance) || 0;          // Bs por USDT (Binance compra)
     const binSell = Number(d.binance_compra) || 0;   // Bs por USDT (Binance venta)
     const bcv     = Number(d.bcv) || 0;
-    const cny     = Number(d.cny) > 0 ? Number(d.cny) : tasaSegura;
+    const cny     = getCnyRate();
     set('sim-rate-bin-buy',  binBuy  > 0 ? moneyFmt.format(binBuy)  : '--');
     set('sim-rate-bin-sell', binSell > 0 ? moneyFmt.format(binSell) : '--');
     set('sim-rate-bcv',      bcv     > 0 ? moneyFmt.format(bcv)     : '--');
@@ -2121,7 +2141,7 @@ function computeImportQuoteDetailLabels(q) {
 
     // Precio inicial de compra (mercancía por unidad, sin costos de envío ni comisiones)
     const precioInicialUSD = Number(q.precioMercanciaPorUnidadUSD) || 0;
-    const precioInicialCNY = precioInicialUSD > 0 ? precioInicialUSD * tasaSegura : 0;
+    const precioInicialCNY = precioInicialUSD > 0 ? precioInicialUSD * getCnyRate() : 0;
     const br   = d.bcv || 0;
     const binr = d.binance_compra || d.binance || 0;
     const precioInicialBCVusd = (precioInicialUSD > 0 && br > 0 && binr > 0)
@@ -2806,7 +2826,7 @@ function reconstruirEntradaRawDesdeQuote(q) {
     const peso  = Number(q.pesoPorCajaKg);
     const unidades = Number(q.unidadesPorCaja);
     const precioUSD = Number(q.precioMercanciaPorUnidadUSD || 0);
-    const precioCNY = precioUSD * tasaSegura;  // ← FIX #5: was `precio` (undefined)
+    const precioCNY = precioUSD * getCnyRate();
     const cajas = Number(q.cajas || 1);
     const envioChinaPorCaja = Number.isFinite(Number(q.envioChinaPorCajaUSD))
         ? Number(q.envioChinaPorCajaUSD)
@@ -2836,7 +2856,7 @@ function computeImportQuoteFromRaw(entradaRaw, tarifaBaseUSD, empresaNombre) {
     if (dims.length !== 3) return null;
     const l = parseLocaleAmount(dims[0]), w = parseLocaleAmount(dims[1]), h = parseLocaleAmount(dims[2]);
     const pbc  = parseLocaleAmount(p[1]), ubc = parseInt(p[2], 10);
-    const pu   = parseLocaleAmount(p[3]) / tasaSegura;
+    const pu   = parseLocaleAmount(p[3]) / getCnyRate();
     const ecbc = p.length >= 5 ? parseLocaleAmount(p[4]) : 0;
     const nc   = p.length >= 6 ? parseInt(p[5], 10) : 1;
     if ([l,w,h,pbc,ubc,pu].some(n => isNaN(n))) return null;

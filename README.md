@@ -34,6 +34,7 @@ Variables útiles:
 | `ADMIN_BOOTSTRAP` | sin default | `1` únicamente durante el bootstrap inicial explícito |
 | `ADMIN_USERNAME` | sin default | Usuario del bootstrap inicial |
 | `ADMIN_PASSWORD` | sin default | Contraseña del bootstrap inicial; se ignora si ya existe admin |
+| `BCV_TLS_FALLBACK` | `0` | `1` habilita fallback TLS controlado solo tras fallar el intento estricto |
 
 `ecosystem.config.cjs` no contiene secretos. Inyecta `SESSION_SECRET` desde el
 entorno/secret manager del host. Para una DB nueva, ejecuta una vez con
@@ -51,6 +52,10 @@ unset ADMIN_RESET_PASSWORD ADMIN_RESET_USERNAME CONFIRM_ADMIN_RESET
 ```
 
 La rotación invalida todas las sesiones. No existe reset automático al reiniciar.
+
+`tasas.cny` representa **CNY por USD** y se deriva de las dos publicaciones BCV.
+Si BCV no puede validarse, se conserva el último éxito con estado stale; la web
+muestra el fallback 6,53 como estimado, nunca como actualización exitosa.
 
 ## PM2
 

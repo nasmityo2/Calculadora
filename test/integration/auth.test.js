@@ -169,7 +169,14 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   assert.ok(quoteForeignKeys.some((fk) => fk.table === 'users' && fk.on_delete === 'RESTRICT'));
 
   const anonymous = new SessionClient(server.baseUrl);
-  let result = await anonymous.login('usuario-inexistente', viewerPassword);
+  let result = await anonymous.request('/api/tasas-venezuela?limit=1');
+  assert.equal(result.response.status, 200);
+  assert.ok(Object.hasOwn(result.data.tasas, 'p2pBuyVesPerUsdt'));
+  assert.ok(Object.hasOwn(result.data.tasas, 'p2pSellVesPerUsdt'));
+  assert.equal(typeof result.data.sourceStatus.binance.stale, 'boolean');
+  assert.equal(typeof result.data.sourceStatus.bcv.stale, 'boolean');
+
+  result = await anonymous.login('usuario-inexistente', viewerPassword);
   assert.equal(result.response.status, 401);
   assert.equal(result.data.success, false);
   assert.equal(result.data.error.code, 'INVALID_CREDENTIALS');

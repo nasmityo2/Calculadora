@@ -6,7 +6,7 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "build:css": "tailwindcss -i ./styles/tailwind-entry.css -o ./public/tailwind.css --minify",
-    "check:js": "node --check src/server.js && node --check src/validators.js && node --check src/sqlite-session-store.js && node --check src/domain/import-calculation.js && node --check scripts/admin-reset.js && node --check scripts/start-e2e-server.js && node --check playwright.config.cjs && node --check public/js/auth.js && node --check public/js/sale-calculations.js && node --check public/app.js",
+    "check:js": "node --check src/server.js && node --check src/validators.js && node --check src/sqlite-session-store.js && node --check src/domain/import-calculation.js && node --check src/rates/rate-sources.js && node --check scripts/admin-reset.js && node --check scripts/start-e2e-server.js && node --check playwright.config.cjs && node --check public/js/auth.js && node --check public/js/sale-calculations.js && node --check public/app.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --test \"test/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
