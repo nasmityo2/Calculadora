@@ -14,8 +14,8 @@ data/historial.db
 data/historial.db-shm
 data/historial.db-wal
 data/backups/
-artifacts/baseline/data/
-artifacts/baseline/pm2-data*/
+artifacts/*/data/
+artifacts/*/pm2-data*/
 
 # Opcional: no versionar cotizaciones ni dumps JSON en data/
 # data/import_cotizaciones.json
