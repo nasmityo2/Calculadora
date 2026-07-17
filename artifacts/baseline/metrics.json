@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-07-17T08:02:57.937Z",
+  "baseCommit": "0c2973ca428a9e9df9ba65d288a92e475bdcad55",
+  "seededQuoteCount": 20,
+  "importQuotesPayloadBytes": 26461,
+  "viewports": {
+    "desktop1440": {
+      "domNodes": 2325,
+      "quoteCards": 20,
+      "scrollWidth": 1440,
+      "clientWidth": 1440
+    },
+    "mobile390": {
+      "domNodes": 2341,
+      "quoteCards": 20,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "mobile360": {
+      "domNodes": 2341,
+      "quoteCards": 20,
+      "scrollWidth": 360,
+      "clientWidth": 360
+    }
+  },
+  "lighthouseScores": {
+    "login": {
+      "performance": 87,
+      "accessibility": 95,
+      "best-practices": 100,
+      "seo": 100
+    },
+    "app": {
+      "performance": 74,
+      "accessibility": 91,
+      "best-practices": 100,
+      "seo": 100
+    }
+  },
+  "processMemoryMb": {
+    "rss": 79,
+    "heapUsed": 19,
+    "heapTotal": 31,
+    "external": 5
+  },
+  "staticBytes": {
+    "public/index.html": 47275,
+    "public/app.js": 133601,
+    "public/styles.css": 86900,
+    "public/login.html": 33053,
+    "public/tailwind.css": 4913
+  },
+  "serverErrors": null
+}
