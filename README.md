@@ -17,7 +17,7 @@ App Node (Express + SQLite + WebSocket) con frontend estático en `public/`.
 ## Comandos
 
 ```bash
-npm install
+npm ci
 npm run build:css    # si cambias clases Tailwind en public/
 npm start            # o: node src/server.js
 npm run migrate      # solo si añades historial_tasas.json en data/ y aún no tienes .db
@@ -28,12 +28,29 @@ Variables útiles:
 | Variable | Default | Descripción |
 |----------|---------|-------------|
 | `PORT` | `3001` | Puerto HTTP |
+| `HOST` | `127.0.0.1` | Interfaz de escucha; producción exige loopback |
 | `DATA_DIR` | `./data` | Directorio de SQLite y datos |
-| `SESSION_SECRET` | `'cambiar-en-produccion-usar-variable-de-entorno'` | Secreto para firmar cookies de sesión |
-| `ADMIN_USERNAME` | `'admin'` | Usuario admin inicial (solo primer arranque) |
-| `ADMIN_PASSWORD` | `'admin123'` | Contraseña admin inicial (cambiar de inmediato en producción) |
+| `SESSION_SECRET` | sin default | Secreto de al menos 64 caracteres en producción |
+| `ADMIN_BOOTSTRAP` | sin default | `1` únicamente durante el bootstrap inicial explícito |
+| `ADMIN_USERNAME` | sin default | Usuario del bootstrap inicial |
+| `ADMIN_PASSWORD` | sin default | Contraseña del bootstrap inicial; se ignora si ya existe admin |
 
-En PM2, define `SESSION_SECRET`, `ADMIN_USERNAME` y `ADMIN_PASSWORD` en `env_production` de `ecosystem.config.cjs` o en el entorno del host.
+`ecosystem.config.cjs` no contiene secretos. Inyecta `SESSION_SECRET` desde el
+entorno/secret manager del host. Para una DB nueva, ejecuta una vez con
+`ADMIN_BOOTSTRAP=1`, `ADMIN_USERNAME` y `ADMIN_PASSWORD`, comprueba el acceso y
+retira las tres variables antes del arranque normal. Nunca pegues la contraseña
+en Git o logs.
+
+Para rotar una contraseña administrativa existente, detén el servicio y usa:
+
+```bash
+read -rsp 'Nueva contraseña: ' ADMIN_RESET_PASSWORD; export ADMIN_RESET_PASSWORD
+export ADMIN_RESET_USERNAME='<usuario-admin>' CONFIRM_ADMIN_RESET=YES
+npm run admin:reset
+unset ADMIN_RESET_PASSWORD ADMIN_RESET_USERNAME CONFIRM_ADMIN_RESET
+```
+
+La rotación invalida todas las sesiones. No existe reset automático al reiniciar.
 
 ## PM2
 

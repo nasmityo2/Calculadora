@@ -157,7 +157,7 @@ server {
 
     # Web principal (calculadora)
     location / {
-        proxy_pass http://localhost:3001;
+        proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade          $http_upgrade;
         proxy_set_header Connection       'upgrade';
@@ -211,22 +211,22 @@ module.exports = {
       name: 'calculadora',
       cwd: '/var/www/calculadora',
       script: '/var/www/calculadora/src/server.js',
-      node_args: '--max-old-space-size=512',
+      node_args: '--max-old-space-size=320',
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '512M',
+      max_memory_restart: '350M',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
+        HOST: '127.0.0.1',
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 3001,
-        SESSION_SECRET: '<CAMBIAR_ESTA_VARIABLE>',
-        ADMIN_USERNAME: 'admin',
-        ADMIN_PASSWORD: '<CAMBIAR_ESTA_CONTRASENA>',
+        HOST: '127.0.0.1',
+        // SESSION_SECRET se inyecta desde el secret manager/entorno del host.
       },
     },
   ],
@@ -298,6 +298,23 @@ SEED_ADMIN_KEY=1
 
 ### 5.4. Comandos PM2
 
+Antes del primer arranque de una base nueva, realiza el bootstrap una sola vez
+desde una consola privada. Los prompts no muestran los secretos:
+
+```bash
+export SESSION_SECRET="$(openssl rand -hex 48)"
+read -rp 'Usuario admin inicial: ' ADMIN_USERNAME
+read -rsp 'Contraseña admin inicial: ' ADMIN_PASSWORD; echo
+export ADMIN_USERNAME ADMIN_PASSWORD ADMIN_BOOTSTRAP=1
+npm start
+# Tras comprobar el arranque, Ctrl+C y retirar variables de bootstrap:
+unset ADMIN_USERNAME ADMIN_PASSWORD ADMIN_BOOTSTRAP
+```
+
+Si la base ya contiene un admin, el arranque ignora `ADMIN_PASSWORD`; nunca lo
+restablece. Para una rotación controlada, detener el servicio y ejecutar
+`npm run admin:reset` como se describe en `README.md`; esto invalida sesiones.
+
 ```bash
 # Iniciar procesos
 cd /var/www/calculadora && pm2 start ecosystem.config.cjs
@@ -345,7 +362,7 @@ tar -xzf /root/calculadora-full-backup.tar.gz
 
 # 6. Instalar dependencias de calculadora
 cd /var/www/calculadora
-npm install
+npm ci --omit=dev
 
 # 7. Construir CSS de Tailwind
 npm run build:css
@@ -393,8 +410,9 @@ curl -I http://127.0.0.1:3002/health
   portables — solo hay que copiarlos.
 - **Logs de PM2**: Están en `/root/.pm2/logs/` y en el caso de bcv-api también
   en `/var/www/bcv-api/logs/`.
-- **Variables secretas**: `SESSION_SECRET`, `ADMIN_PASSWORD` en calculadora,
-  y las API Keys de bcv-api (se gestionan por BD, no en `.env`).
+- **Variables secretas**: `SESSION_SECRET` se inyecta desde el host y nunca se
+  escribe en `ecosystem.config.cjs`. `ADMIN_PASSWORD` solo existe durante un
+  bootstrap explícito y se retira antes del arranque normal.
 - **Migraciones**: Si es primera vez, en bcv-api ejecutar
   `cd /var/www/bcv-api && node bin/bcv-admin.js db:setup`
 - **Tailwind**: Si modificas clases CSS en `public/`, re-ejecuta

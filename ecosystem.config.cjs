@@ -10,25 +10,25 @@ module.exports = {
       name: 'calculadora',
       cwd: root,
       script: path.join(root, 'src', 'server.js'),
-      // Limita el heap V8 a 512 MB: con 1 GB de RAM evita que el proceso
-      // crezca sin control antes de que PM2 lo reinicie.
-      node_args: '--max-old-space-size=512',
+      // Punto inicial medido para el VPS de 1 GB; revisar con 24 h de métricas.
+      node_args: '--max-old-space-size=320',
       exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       watch: false,
-      max_memory_restart: '512M',
+      max_memory_restart: '350M',
       env: {
         NODE_ENV: 'production',
         PORT: 3001,
+        HOST: '127.0.0.1',
         // DATA_DIR: path.join(root, 'data'),
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 3001,
-        SESSION_SECRET: process.env.SESSION_SECRET || 'cambiar-en-produccion-usar-variable-de-entorno',
-        ADMIN_USERNAME: process.env.ADMIN_USERNAME || 'admin',
-        ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'admin123',
+        HOST: '127.0.0.1',
+        // SESSION_SECRET se inyecta desde el entorno/secret manager del host.
+        // El bootstrap de admin es un comando explícito; nunca vive aquí.
       },
     },
   ],

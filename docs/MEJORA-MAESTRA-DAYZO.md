@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:03:00Z  
+Última actualización: 2026-07-17T08:12:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 1 — Seguridad urgente
+Fase actual: 2 — Cálculos canónicos
 
 ## Estados
 
@@ -15,8 +15,8 @@ Fase actual: 1 — Seguridad urgente
 ## Resumen de fases
 
 - [x] Fase 0 — Baseline, respaldo y mapa
-- [~] Fase 1 — Seguridad urgente
-- [ ] Fase 2 — Cálculos canónicos
+- [x] Fase 1 — Seguridad urgente
+- [~] Fase 2 — Cálculos canónicos
 - [ ] Fase 3 — API/lista de cotizaciones
 - [ ] Fase 4 — UX cotizaciones
 - [ ] Fase 5 — Simulador
@@ -94,4 +94,52 @@ Fase actual: 1 — Seguridad urgente
 
 ## Registro de fases siguientes
 
-Esta sección se amplía al cerrar cada gate con archivos, diff, comandos, resultado, pruebas manuales, métricas, riesgos, rollback y siguiente tarea exacta.
+## Fase 1 — Seguridad urgente
+
+- ID: F1-01 / secretos, bootstrap y reset admin
+- Estado: [x] COMPLETADO
+- Archivos: `ecosystem.config.cjs`, `src/server.js`, `scripts/admin-reset.js`, `README.md`, `SETUP.md`.
+- Evidencia: PM2 ya no contiene secretos ni credenciales fallback. Producción aborta con `SESSION_SECRET` menor de 64 caracteres. El bootstrap exige `ADMIN_BOOTSTRAP=1`, usuario válido y password de 12+ caracteres; no imprime contraseñas. Un admin existente nunca se resetea en arranque. La CLI de rotación exige confirmación explícita y elimina sesiones en una transacción.
+- Comandos: `npm run check`; integración de bootstrap, reinicio con variable legacy y `npm run admin:reset`.
+- Resultado: admin original conserva password frente a una variable vieja; CLI cambia password e invalida sesión anterior.
+- Riesgo/rollback: instalaciones nuevas sin bootstrap abortan en producción de forma intencional. Rollback de código solo tras retirar variables `ADMIN_*`; no restaurar la DB salvo corrupción.
+- Pendiente siguiente: bind y cierre fatal.
+
+- ID: F1-02 / loopback y errores fatales
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `ecosystem.config.cjs`.
+- Evidencia: `HOST=127.0.0.1`; producción rechaza `0.0.0.0`; `server.listen(PORT, HOST)`; errores de bind, excepciones no capturadas y promesas rechazadas pasan por shutdown y salen distinto de cero.
+- Comandos: test de integración con segundo proceso en el mismo puerto (exit 1); test de producción con host no-loopback (exit 1).
+- Resultado: PM2 puede reiniciar un proceso fatal en vez de mantener estado potencialmente corrupto.
+- Riesgo/rollback: contenedores que requieran bind público deben usar un proxy sidecar/loopback o una excepción diseñada; no abrir producción por defecto.
+- Pendiente siguiente: URL, auth y dependencias.
+
+- ID: F1-03 / URL de producto y pruebas auth
+- Estado: [x] COMPLETADO
+- Archivos: `test/unit/validators.test.js`, `test/integration/auth.test.js`, `package.json`.
+- Evidencia: tests para URL sin esquema, protocolos rechazados, longitud y regresión de `{{https...}}`; login válido/inválido, regeneración de sesión, invalidación de ID previo, logout, CSRF, roles admin/viewer, UUID, IDOR y aislamiento por usuario.
+- Comandos: `npm test`; `npm run test:integration`.
+- Resultado: 6 unit tests y 3 integration tests verdes.
+- Prueba manual/smoke: servidor real en DB temporal, dos viewers y admin; crear cotización con CSRF, lectura/borrado cruzado 404, logout invalida acceso.
+- Riesgo/rollback: test usa solo DB temporal y datos anonimizados.
+- Pendiente siguiente: auditoría de dependencias.
+
+- ID: F1-04 / dependencias vulnerables
+- Estado: [x] COMPLETADO
+- Archivos: `package.json`, `package-lock.json`.
+- Evidencia: Axios actualizado a 1.18.1, `ws` a 8.21.1; overrides auditados `form-data=4.0.6`, `qs=6.15.3`. Lighthouse se fijó en 12.6.1 porque la última 13.4.0 arrastraba una cadena vulnerable de telemetría solo-dev.
+- Comandos: `npm install axios@latest ws@latest`; `npm view form-data version`; `npm view qs version`; `npm audit`; `npm audit --omit=dev`.
+- Resultado: `npm audit` final: 0 vulnerabilidades en 373 paquetes.
+- Costo/licencia: sin nueva dependencia runtime; versiones existentes actualizadas. Lighthouse sigue solo en desarrollo y no entra con `npm ci --omit=dev`.
+- Riesgo/rollback: Axios/`ws` mantienen API usada; tests y smoke verdes. Lockfile permite rollback exacto.
+- Pendiente siguiente: Fase 2, extraer dominio monetario y recalcular en servidor.
+
+- ID: F1-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos modificados: `.gitignore` no cambia en esta fase; `ecosystem.config.cjs`, `src/server.js`, `scripts/admin-reset.js`, `README.md`, `SETUP.md`, `package.json`, `package-lock.json`, tests y este tracker.
+- Resumen git diff: seguridad de arranque/bind/shutdown, CLI de rotación, actualización de dependencias y primera suite backend.
+- Comandos exactos: `npm run check`; `npm audit --omit=dev --audit-level=high`; `npm audit`.
+- Resultado: sintaxis, 6 unit, 3 integration y build CSS verdes; auditoría completa 0 vulnerabilidades.
+- Métricas antes/después: vulnerabilidades producción 5 → 0; heap/bundle runtime sin dependencia nueva.
+- Riesgo/rollback: revertir el commit de Fase 1 restaura comportamiento anterior, pero reintroduce credenciales/reset inseguro; rollback recomendado solo del release completo, nunca de la DB.
+- Siguiente tarea exacta: crear `src/domain/import-calculation.js`, congelar DTO/version y vectores.

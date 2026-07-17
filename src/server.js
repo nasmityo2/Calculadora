@@ -32,24 +32,33 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // ─── SECCIÓN: VALIDACIÓN DE VARIABLES DE ENTORNO ────────────────────────────
 
 let SESSION_SECRET = process.env.SESSION_SECRET;
-if (!SESSION_SECRET || SESSION_SECRET.length < 32) {
+const SESSION_SECRET_MIN_LENGTH = IS_PROD ? 64 : 32;
+if (!SESSION_SECRET || SESSION_SECRET.length < SESSION_SECRET_MIN_LENGTH) {
   if (IS_PROD) {
-    log.error('SESSION_SECRET no definido o demasiado corto (mínimo 32 caracteres). Abortando en producción.');
+    log.error(`SESSION_SECRET no definido o demasiado corto (mínimo ${SESSION_SECRET_MIN_LENGTH} caracteres). Abortando en producción.`);
     process.exit(1);
   }
   SESSION_SECRET = crypto.randomBytes(48).toString('hex');
   log.warn('SESSION_SECRET temporal generado — las sesiones NO sobrevivirán reinicios. Define SESSION_SECRET (≥32 chars).');
-} else if (IS_PROD && SESSION_SECRET.length < 64) {
-  log.warn('SESSION_SECRET tiene menos de 64 caracteres. Se recomienda ≥64 en producción.');
 }
 
-const PORT               = process.env.PORT     || 3001;
+const PORT               = Number.parseInt(process.env.PORT || '3001', 10);
+const HOST               = V.cleanString(process.env.HOST || '127.0.0.1', 255);
 const DATA_DIR           = path.resolve(process.env.DATA_DIR || path.join(__dirname, '..', 'data'));
 const ROOT               = path.join(__dirname, '..');
 const PUBLIC_DIR         = path.join(ROOT, 'public');
 const DB_FILE            = path.join(DATA_DIR, 'historial.db');
 const IMPORT_QUOTES_FILE = path.join(DATA_DIR, 'import_cotizaciones.json');
 const MAX_HIST_LIMIT     = 10000; // tope duro de registros devueltos
+
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+  log.error('PORT inválido. Debe ser un entero entre 0 y 65535.');
+  process.exit(1);
+}
+if (IS_PROD && !['127.0.0.1', '::1', 'localhost'].includes(HOST)) {
+  log.error('HOST de producción debe ser loopback (127.0.0.1, ::1 o localhost).');
+  process.exit(1);
+}
 
 // ─── SECCIÓN: EXPRESS + MIDDLEWARE BASE ─────────────────────────────────────
 
@@ -355,33 +364,46 @@ function assignOrphanImportQuotesToAdmin() {
   if (result.changes > 0) log.info(`Migración: ${result.changes} cotizaciones sin dueño asignadas al admin`);
 }
 
-async function seedAdminUser() {
-  const existing = db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
-  const envPass  = process.env.ADMIN_PASSWORD;
+async function bootstrapAdminUser() {
+  const existing = db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('admin');
+  const requested = process.env.ADMIN_BOOTSTRAP === '1';
+  const username = V.cleanString(process.env.ADMIN_USERNAME, 64);
+  const password = process.env.ADMIN_PASSWORD == null ? '' : String(process.env.ADMIN_PASSWORD);
 
-  if (!existing) {
-    const password = envPass || crypto.randomBytes(16).toString('hex');
-    const hash     = await bcrypt.hash(password, 12);
-    db.prepare('INSERT INTO users (id, username, password, role, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(crypto.randomUUID(), process.env.ADMIN_USERNAME || 'admin', hash, 'admin', Date.now());
-    if (!envPass) {
-      log.warn('╔══════════════════════════════════════════════════════════╗');
-      log.warn('║  ADMIN CREADO — GUARDA ESTA CONTRASEÑA AHORA              ║');
-      log.warn(`║  Usuario:     ${process.env.ADMIN_USERNAME || 'admin'}`);
-      log.warn(`║  Contraseña:  ${password}`);
-      log.warn('║  Configura ADMIN_PASSWORD en PM2 para resetearla.        ║');
-      log.warn('╚══════════════════════════════════════════════════════════╝');
-    } else {
-      log.info('Usuario admin creado desde ADMIN_PASSWORD.');
+  try {
+    if (existing) {
+      if (requested) {
+        throw new Error('ADMIN_BOOTSTRAP fue solicitado, pero ya existe un administrador. Usa la CLI admin:reset.');
+      }
+      if (password) {
+        log.warn('ADMIN_PASSWORD fue ignorado: nunca se actualizan credenciales durante el arranque.');
+      }
+      return;
     }
-  } else if (envPass) {
-    const hash = await bcrypt.hash(envPass, 12);
-    db.prepare('UPDATE users SET password = ? WHERE role = ?').run(hash, 'admin');
-    log.info('Contraseña de admin actualizada desde ADMIN_PASSWORD.');
-  }
 
-  // Nunca dejar la contraseña en texto plano en memoria/entorno
-  delete process.env.ADMIN_PASSWORD;
+    if (!requested) {
+      if (IS_PROD) {
+        throw new Error('No existe un administrador. Ejecuta un bootstrap explícito antes de iniciar producción.');
+      }
+      log.warn('No existe un administrador. El modo desarrollo continúa sin crear credenciales implícitas.');
+      return;
+    }
+
+    const usernameError = V.validateUsername(username);
+    if (usernameError) throw new Error(`ADMIN_USERNAME inválido: ${usernameError}`);
+    const passwordError = V.validatePassword(password);
+    if (passwordError || password.length < 12) {
+      throw new Error(`ADMIN_PASSWORD inválido: ${passwordError || 'debe tener al menos 12 caracteres.'}`);
+    }
+
+    const hash = await bcrypt.hash(password, 12);
+    db.prepare('INSERT INTO users (id, username, password, role, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), username, hash, 'admin', Date.now());
+    log.info(`Bootstrap de administrador completado para "${username}". Retira las variables ADMIN_* antes del siguiente arranque.`);
+  } finally {
+    // Evita conservar secretos en el entorno del proceso una vez utilizados.
+    delete process.env.ADMIN_PASSWORD;
+  }
 }
 
 migrateImportQuotesFromJSON();
@@ -1455,26 +1477,32 @@ updateBinance();
 server.on('error', (err) => {
   log.error('Error del servidor HTTP:', err.message);
   if (err.code === 'EADDRINUSE' || err.syscall === 'listen') {
-    try { db.close(); } catch (_) {}
-    process.exit(1);
+    shutdown('HTTP_SERVER_ERROR', 1);
   }
 });
 
 (async function start() {
-  await seedAdminUser();
-  server.listen(PORT, () => {
-    log.info(`Calculadora disponible en http://localhost:${PORT}/calculadoraa`);
-    log.info(`Health check en        http://localhost:${PORT}/health`);
-    log.info(`Base de datos SQLite:  ${DB_FILE}`);
-    log.info(`Total registros en DB: ${stmtCount.get().c.toLocaleString()}`);
-  });
+  try {
+    await bootstrapAdminUser();
+    server.listen(PORT, HOST, () => {
+      const address = server.address();
+      const listeningPort = typeof address === 'object' && address ? address.port : PORT;
+      log.info(`Calculadora disponible en http://${HOST}:${listeningPort}/calculadoraa`);
+      log.info(`Health check en        http://${HOST}:${listeningPort}/health`);
+      log.info(`Base de datos SQLite:  ${DB_FILE}`);
+      log.info(`Total registros en DB: ${stmtCount.get().c.toLocaleString()}`);
+    });
+  } catch (err) {
+    log.error('Arranque abortado:', err.message);
+    shutdown('STARTUP_FAILURE', 1);
+  }
 })();
 
 // ─── SECCIÓN: GRACEFUL SHUTDOWN ─────────────────────────────────────────────
 
 let shuttingDown = false;
 
-function shutdown(signal) {
+function shutdown(signal, exitCode = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info(`[${signal}] Cerrando servidor…`);
@@ -1489,23 +1517,32 @@ function shutdown(signal) {
   } catch (_) {}
   setTimeout(() => { wssTasas.clients.forEach((c) => c.terminate()); }, 250);
 
-  // Espera a que terminen los requests en curso (máx 10s).
-  server.close(() => {
+  const finalize = () => {
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (e) { log.warn('wal_checkpoint:', e.message); }
     try { db.close(); } catch (_) {}
     log.info('Servidor y DB cerrados correctamente.');
-    process.exit(0);
-  });
+    process.exit(exitCode);
+  };
+
+  // Espera a que terminen los requests en curso (máx 10s).
+  if (server.listening) server.close(finalize);
+  else finalize();
 
   setTimeout(() => {
     log.warn('Cierre forzado tras timeout.');
     try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (_) {}
     try { db.close(); } catch (_) {}
-    process.exit(1);
+    process.exit(exitCode || 1);
   }, 10000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
-process.on('uncaughtException', (err) => { log.error('uncaughtException:', err.message); });
-process.on('unhandledRejection', (reason) => { log.error('unhandledRejection:', reason?.message || reason); });
+process.on('uncaughtException', (err) => {
+  log.error('uncaughtException fatal:', err?.name || 'Error');
+  shutdown('UNCAUGHT_EXCEPTION', 1);
+});
+process.on('unhandledRejection', (reason) => {
+  log.error('unhandledRejection fatal:', reason instanceof Error ? reason.name : typeof reason);
+  shutdown('UNHANDLED_REJECTION', 1);
+});

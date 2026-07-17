@@ -196,6 +196,7 @@ async function main() {
       HOST: '127.0.0.1',
       DATA_DIR,
       SESSION_SECRET: crypto.randomBytes(48).toString('hex'),
+      ADMIN_BOOTSTRAP: '1',
       ADMIN_USERNAME: USERNAME,
       ADMIN_PASSWORD: PASSWORD,
     },
