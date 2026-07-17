@@ -192,6 +192,16 @@ test('cotizaciones compactas escalan de 0 a 100 y cargan un detalle a la vez', a
   await expect(page.locator('#sim-source-banner')).toBeVisible();
   await expect(page.locator('#sim-source-banner')).toContainText('costos congelados');
   expect(readQuoteJson(secondId)).toBe(beforeSimulation);
+  await expect(page.locator('#sim-saved-actions')).toBeVisible();
+  await page.locator('#sim-cancel-saved').click();
+  await expect(page.locator('#sim-source-banner')).toBeHidden();
+  expect(readQuoteJson(secondId)).toBe(beforeSimulation);
+
+  await secondCard.locator('[data-quote-action="simulate"]').click();
+  await page.locator('#sim-input').fill('9.99');
+  await page.locator('#sim-save-plan').click();
+  await expect(page.locator('#sim-source-banner')).toContainText('Plan guardado');
+  expect(JSON.parse(readQuoteJson(secondId)).ventaUnitarioUSD).toBe(9.99);
 
   await secondCard.locator('.c-quote-menu summary').click();
   await expect(secondCard.locator('[data-quote-action="edit"]')).toBeVisible();

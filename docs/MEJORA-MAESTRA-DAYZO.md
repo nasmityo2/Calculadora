@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:35:00Z  
+Última actualización: 2026-07-17T08:43:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 5 — Simulador
+Fase actual: 6 — Login DAYZO
 
 ## Estados
 
@@ -19,8 +19,8 @@ Fase actual: 5 — Simulador
 - [x] Fase 2 — Cálculos canónicos
 - [x] Fase 3 — API/lista de cotizaciones
 - [x] Fase 4 — UX cotizaciones
-- [~] Fase 5 — Simulador
-- [ ] Fase 6 — Login DAYZO
+- [x] Fase 5 — Simulador
+- [~] Fase 6 — Login DAYZO
 - [ ] Fase 7 — Tasas y frescura
 - [ ] Fase 8 — Modularización/performance/CSP
 - [ ] Fase 9 — VPS 1 GB
@@ -262,3 +262,42 @@ Fase actual: 5 — Simulador
 - Métricas antes/después: DOM con 20 cotizaciones 2,341 → 1,268 nodos (−45.8%); payload 26,461 → 10,285 B (−61.1%); Lighthouse app performance 74 → 76; RSS 79 → 81 MB.
 - Riesgo/rollback: JS/CSS crecen temporalmente por convivencia con renderer legacy, que se elimina en Fase 8; rollback al commit F3 mantiene API.
 - Siguiente tarea exacta: Fase 5, convertir simulador a fuente → forma de venta → resultado y separar guardado/cancelación.
+
+## Fase 5 — Simulador
+
+- ID: F5-01 / flujo progresivo y fuentes
+- Estado: [x] COMPLETADO
+- Archivos: `public/index.html`, `public/app.js`, `public/styles.css`.
+- Evidencia: tres secciones numeradas fuente → forma de venta → resultado; fuentes “cotización actual”, “guardada” y “costo manual”; selector de guardadas; banner con nombre/costos congelados.
+- Comandos: captura responsive phase5 y E2E desde CTA de una guardada.
+- Resultado: la selección guardada vive en `saleSimulationSession`; `lastImportQuote` de la cotización actual ya no se sobreescribe.
+- Riesgo/rollback: controles clásicos siguen disponibles dentro de cada paso para conservar compatibilidad.
+- Pendiente siguiente: cálculo puro.
+
+- ID: F5-02 / ROI, margen y validación
+- Estado: [x] COMPLETADO
+- Archivos: `public/js/sale-calculations.js`, `test/unit/sale-calculations.test.js`, `public/service-worker.js`.
+- Evidencia: cálculo puro UMD/CommonJS para precio USD, Bs y ROI; positivos/rangos; salida separa ROI sobre costo y margen sobre venta. Presets y copy ahora dicen ROI.
+- Comandos: `npm test`.
+- Resultado: 4 nuevos vectores; 19 unit totales verdes. Service worker v3 precachea módulo.
+- Riesgo/rollback: preview cliente no es fuente persistente; PUT pasa por recálculo canónico servidor.
+- Pendiente siguiente: guardado explícito.
+
+- ID: F5-03 / guardar o cancelar
+- Estado: [x] COMPLETADO
+- Archivos: `public/app.js`, `public/index.html`, `test/e2e/quotes.spec.js`.
+- Evidencia: “Guardar plan en la cotización” hace PUT explícito; “Cerrar sin guardar” borra sesión de simulación y no hace mutación. Tasa P2P usada, hora y estado stale/fallback visibles.
+- Comandos: E2E compara JSON antes/después de cancelar (idéntico), luego guarda precio 9.99 y confirma persistencia canónica.
+- Resultado: cancelar no guarda; guardar refresca solo datos/cache relevantes y muestra confirmación.
+- Riesgo/rollback: la sesión es efímera y se pierde al recargar, intencionalmente para evitar escrituras implícitas.
+- Pendiente siguiente: gate visual.
+
+- ID: F5-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: simulador, módulo puro, tests, SW, capturas `artifacts/phase5`, tracker.
+- Resumen git diff: estado separado, flujo 3 pasos, cálculo puro, tasa/frescura y CTA guardar/cancelar.
+- Comandos exactos: `npm run check`; `npm run test:e2e`; `CAPTURE_LABEL=phase5 CAPTURE_LIGHTHOUSE=0 node scripts/capture-baseline.js`.
+- Resultado: 19 unit + 3 integration + 1 E2E verdes; 81 MB RSS; cero overflow 1440/390/360.
+- Prueba manual: CTA desde cotización desplaza al simulador, precarga precio y muestra costos congelados; cancelar vuelve a fuente actual.
+- Riesgo/rollback: revertir F5 conserva CTA F4 con simulador clásico; DB no requiere rollback.
+- Siguiente tarea exacta: Fase 6, extraer auth CSS/JS, rediseñar identidad DAYZO y ampliar E2E/a11y.

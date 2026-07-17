@@ -36,6 +36,7 @@ function markRateCardsReady() {
 // GLOBAL STATE
 // ═══════════════════════════════════════════════
 let d = { bcv: 0, binance: 0, binance_compra: 0, cny: 0 };
+let ratesDisplayMeta = { lastUpdate: null, stale: true, cnyFallback: true };
 let m = 'VES';
 
 // Modo histórico: respuesta de /api/tasas-historicas o null (= tasas en vivo)
@@ -61,7 +62,7 @@ let gCostoCaja = 0;
 let gUnidadesPorCaja = 0;
 let simType = 'unidad';
 let simMode = 'precio';
-let simSource = 'calc';
+let simSource = 'current';
 let feePlataforma = 0.03;
 let feeBanco = 0.0125;
 let lastImportQuote = null;
@@ -1078,6 +1079,11 @@ async function refresh() {
 function updateUI(j) {
     const t = j && j.tasas;
     if (!t) { refreshImpUnitarioRates(); return; }
+    ratesDisplayMeta = {
+        lastUpdate: j.lastSuccessAt || j.last_update || j.fecha || null,
+        stale: j.sourceStatus?.stale === true,
+        cnyFallback: !(Number(t.cny) > 0),
+    };
 
     const binanceNum = Number(t.binance);
     const bcvNum = Number(t.bcv);
@@ -1534,20 +1540,68 @@ function calcImport() {
 // GANANCIA SIMULATOR
 // ═══════════════════════════════════════════════
 function setSimSource(s) {
+    if (s === 'calc') s = 'current';
+    if (!['current', 'saved', 'manual'].includes(s)) return;
     simSource = s;
     const on  = 'c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth shadow';
     const off = 'c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white';
-    const bCalc = document.getElementById('btn-src-calc'), bMan = document.getElementById('btn-src-manual');
-    const mi   = document.getElementById('sim-manual-input-container');
-    if (s === 'calc') {
-        bCalc.className = on + ' bg-indigo-600 text-white'; bMan.className = off;
-        mi.style.display = 'none';
-    } else {
-        bMan.className = on + ' bg-indigo-600 text-white'; bCalc.className = off;
-        mi.style.display = 'block';
-        document.getElementById('sim-costo-manual').focus();
-    }
+    const buttons = {
+        current: document.getElementById('btn-src-current'),
+        saved: document.getElementById('btn-src-saved'),
+        manual: document.getElementById('btn-src-manual'),
+    };
+    Object.entries(buttons).forEach(([key, button]) => {
+        if (button) button.className = key === s ? on + ' bg-indigo-600 text-white' : off;
+    });
+    const manual = document.getElementById('sim-manual-input-container');
+    const saved = document.getElementById('sim-saved-select-container');
+    if (manual) manual.style.display = s === 'manual' ? 'block' : 'none';
+    if (saved) saved.hidden = s !== 'saved';
+    const savedActions = document.getElementById('sim-saved-actions');
+    if (savedActions) savedActions.hidden = !(s === 'saved' && saleSimulationSession?.quoteId);
+    const banner = document.getElementById('sim-source-banner');
+    if (banner && s !== 'saved') banner.hidden = true;
+    if (s === 'manual') document.getElementById('sim-costo-manual')?.focus();
+    if (s === 'saved') refreshSavedSimulationSelect();
     calcGanancia();
+}
+
+function simulationQuote() {
+    if (simSource === 'saved') return saleSimulationSession?.quote || null;
+    if (simSource === 'current') return lastImportQuote;
+    return null;
+}
+
+function simulationCostContext() {
+    if (simSource === 'manual') {
+        const cost = parseLocaleAmount(document.getElementById('sim-costo-manual')?.value);
+        return { cost, unitsPerBox: 1, totalCount: 1, investment: 0 };
+    }
+    const quote = simulationQuote();
+    if (!quote) return { cost: 0, unitsPerBox: 0, totalCount: 1, investment: 0 };
+    const unitsPerBox = Number(quote.unidadesPorCaja) || 0;
+    const totalCount = simType === 'unidad'
+        ? (Number(quote.unidadesTotales) || 1)
+        : (Number(quote.cajas) || 1);
+    return {
+        cost: simType === 'unidad'
+            ? (Number(quote.costoUnitarioUSD) || 0)
+            : (Number(quote.costoPorCajaUSD) || 0),
+        unitsPerBox,
+        totalCount,
+        investment: Number(quote.inversionTotalUSD) || 0,
+    };
+}
+
+function refreshSavedSimulationSelect() {
+    const select = document.getElementById('sim-saved-select');
+    if (!select) return;
+    const current = saleSimulationSession?.quoteId || select.value;
+    select.innerHTML = '<option value="">Elegir cotización…</option>' +
+        importQuotesAll.map((quote) =>
+            `<option value="${escapeHtml(quote.id)}">${escapeHtml(quote.name)}</option>`
+        ).join('');
+    if ([...select.options].some(option => option.value === current)) select.value = current;
 }
 
 function setSimType(t) {
@@ -1578,7 +1632,7 @@ function setSimMode(m) {
         icon.innerText = 'Bs'; ip.placeholder = 'Precio venta (Bs.)';
         l1.innerText = 'Ganancia Neta'; l2.innerText = 'Rentabilidad (ROI)';
     } else {
-        icon.innerText = '%'; ip.placeholder = 'Margen deseado (%)';
+        icon.innerText = '%'; ip.placeholder = 'ROI deseado sobre costo (%)';
         l1.innerText = 'Precio Sugerido'; l2.innerText = 'Ganancia Estimada';
     }
     calcGanancia();
@@ -1586,10 +1640,7 @@ function setSimMode(m) {
 
 /** Total de ítems para proyectar ganancia total en el sparkline. */
 function simTotalCount() {
-    if (simSource !== 'calc' || !lastImportQuote) return 1;
-    return simType === 'unidad'
-        ? (Number(lastImportQuote.unidadesTotales) || 1)
-        : (Number(lastImportQuote.cajas) || 1);
+    return simulationCostContext().totalCount;
 }
 
 /** Sparkline SVG: ganancia total proyectada vs. precio de venta (cruza $0 en el equilibrio). */
@@ -1638,18 +1689,24 @@ function updateSimReferenceUI() {
     const binBuy  = Number(d.binance) || 0;          // Bs por USDT (Binance compra)
     const binSell = Number(d.binance_compra) || 0;   // Bs por USDT (Binance venta)
     const bcv     = Number(d.bcv) || 0;
+    const cny     = Number(d.cny) > 0 ? Number(d.cny) : tasaSegura;
     set('sim-rate-bin-buy',  binBuy  > 0 ? moneyFmt.format(binBuy)  : '--');
     set('sim-rate-bin-sell', binSell > 0 ? moneyFmt.format(binSell) : '--');
     set('sim-rate-bcv',      bcv     > 0 ? moneyFmt.format(bcv)     : '--');
-    set('sim-rate-cny',      moneyFmt.format(tasaSegura));
+    set('sim-rate-cny',      moneyFmt.format(cny));
 
-    let cb = 0;
-    if (simSource === 'manual') cb = parseLocaleAmount(document.getElementById('sim-costo-manual')?.value);
-    else cb = simType === 'unidad' ? gCostoUnitario : gCostoCaja;
+    const { cost: cb } = simulationCostContext();
     const binr = binSell || binBuy;
     set('sim-base-type', simType === 'unidad' ? 'por unidad' : 'por caja');
     set('sim-base-usd', usdFmt.format(cb));
     set('sim-base-bs', binr > 0 ? 'Bs ' + moneyFmt.format(cb * binr) : 'Bs --');
+    const status = document.getElementById('sim-rate-status');
+    if (status) {
+        const freshness = ratesDisplayMeta.stale ? ' · datos desactualizados' : '';
+        const fallback = ratesDisplayMeta.cnyFallback ? ' · CNY estimado' : '';
+        status.textContent = `Tasa P2P usada: ${binr > 0 ? moneyFmt.format(binr) : 'no disponible'} · ${ratesDisplayMeta.lastUpdate || 'sin hora'}${freshness}${fallback}`;
+        status.classList.toggle('is-stale', ratesDisplayMeta.stale || binr <= 0);
+    }
 }
 
 function clearActiveMargenChip() {
@@ -1687,9 +1744,8 @@ function calcGanancia() {
     const totalBcv = document.getElementById('sim-total-bcv');
     const totalBasis = document.getElementById('sim-total-basis');
 
-    let cb = 0;
-    if (simSource === 'manual') cb = parseLocaleAmount(document.getElementById('sim-costo-manual').value);
-    else cb = simType === 'unidad' ? gCostoUnitario : gCostoCaja;
+    const context = simulationCostContext();
+    const cb = context.cost;
 
     const br   = d.bcv || 0;
     const binr = d.binance_compra || d.binance || 0;
@@ -1720,16 +1776,21 @@ function calcGanancia() {
         drawSimSparkline(cb, simTotalCount(), 0);
     };
 
-    if (!val || !cb) { resetAll(); return; }
-    if (simMode === 'bs' && binr <= 0) { resetAll(); return; }
-
-    // Precio de venta en USD según el modo
-    let saleUSD, gan, roi;
-    if (simMode === 'precio')      { saleUSD = val; }
-    else if (simMode === 'bs')     { saleUSD = val / binr; }
-    else                            { saleUSD = cb * (1 + val / 100); }
-    gan = saleUSD - cb;
-    roi = (gan / cb) * 100;
+    const simulation = window.DayzoSaleCalculations?.calculateSaleSimulation({
+        costUsd: cb,
+        inputValue: val,
+        mode: simMode === 'precio' ? 'priceUsd' : simMode === 'bs' ? 'priceVes' : 'roi',
+        vesPerUsd: binr,
+        count: context.totalCount,
+    });
+    if (!simulation?.ok) { resetAll(); return; }
+    const {
+        saleUsd: saleUSD,
+        profitUsd: gan,
+        roiPct: roi,
+        marginPct: margenVenta,
+        totalProfitUsd: gananciaTotal,
+    } = simulation.value;
 
     if (!isMargin) {
         r1.innerText  = (gan >= 0 ? '+' : '') + usdFmt.format(gan);
@@ -1750,23 +1811,21 @@ function calcGanancia() {
     if (precioBcv) precioBcv.innerText = crossOf(saleUSD);
 
     // Equivalente unitario (source calc + por caja)
-    if (simSource === 'calc' && simType === 'caja' && gUnidadesPorCaja > 0) {
+    if (simSource !== 'manual' && simType === 'caja' && context.unitsPerBox > 0) {
         rowU.style.display = 'flex';
-        const eu = saleUSD / gUnidadesPorCaja;
+        const eu = saleUSD / context.unitsPerBox;
         document.getElementById('sim-unit-val').innerText   = usdFmt.format(eu);
         document.getElementById('sim-unit-cross').innerText = crossOf(eu);
     } else if (rowU) { rowU.style.display = 'none'; }
 
     // Margen sobre el precio de venta (distinto del ROI que es sobre el costo)
-    const margenVenta = saleUSD > 0 ? (gan / saleUSD) * 100 : 0;
     if (margenEl) {
         margenEl.innerText = margenVenta.toFixed(2) + '%';
         margenEl.className = `c-sim-result-row__val font-bold text-sm ${margenVenta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
     }
 
     // Ganancia total proyectada (precio × cantidad de la fuente)
-    const count = simTotalCount();
-    const gananciaTotal = gan * count;
+    const count = context.totalCount;
     if (rowTotal && totalEl) {
         if (count > 1) {
             rowTotal.style.display = 'flex';
@@ -1780,12 +1839,12 @@ function calcGanancia() {
     }
 
     // Unidades a vender para recuperar la inversión
-    const inv = Number(lastImportQuote?.inversionTotalUSD);
+    const inv = context.investment;
     let gananciaPorUnidad = 0;
-    if (simType === 'unidad') gananciaPorUnidad = saleUSD - gCostoUnitario;
-    else if (gUnidadesPorCaja > 0) gananciaPorUnidad = (saleUSD - gCostoCaja) / gUnidadesPorCaja;
+    if (simType === 'unidad') gananciaPorUnidad = gan;
+    else if (context.unitsPerBox > 0) gananciaPorUnidad = gan / context.unitsPerBox;
     if (rowRec) {
-        if (simSource === 'calc' && Number.isFinite(inv) && inv > 0 && gananciaPorUnidad > 0) {
+        if (simSource !== 'manual' && Number.isFinite(inv) && inv > 0 && gananciaPorUnidad > 0) {
             const u = Math.ceil(inv / gananciaPorUnidad);
             rowRec.style.display = 'flex';
             recEl.innerText = u.toLocaleString('es-VE') + ' un.';
@@ -1797,8 +1856,8 @@ function calcGanancia() {
     // Guarda el plan de venta actual para poder persistirlo junto a la cotización
     lastSimPlan = {
         modo: simMode, tipo: simType, fuente: simSource,
-        ventaUnitarioUSD: simType === 'unidad' ? saleUSD : (gUnidadesPorCaja > 0 ? saleUSD / gUnidadesPorCaja : saleUSD),
-        ventaPorCajaUSD:  simType === 'caja'   ? saleUSD : (gUnidadesPorCaja > 0 ? saleUSD * gUnidadesPorCaja : saleUSD),
+        ventaUnitarioUSD: simType === 'unidad' ? saleUSD : (context.unitsPerBox > 0 ? saleUSD / context.unitsPerBox : saleUSD),
+        ventaPorCajaUSD:  simType === 'caja'   ? saleUSD : (context.unitsPerBox > 0 ? saleUSD * context.unitsPerBox : saleUSD),
         gananciaUnitariaUSD: gananciaPorUnidad,
         gananciaTotalUSD: gananciaTotal,
         roiPct: roi,
@@ -1810,9 +1869,7 @@ function calcGanancia() {
 
 /** Aplica un margen sobre el costo base: precio = costo × (1 + margen/100). */
 function aplicarMargenRapido(margenPct) {
-    let cb = 0;
-    if (simSource === 'manual') cb = parseLocaleAmount(document.getElementById('sim-costo-manual').value);
-    else cb = simType === 'unidad' ? gCostoUnitario : gCostoCaja;
+    const cb = simulationCostContext().cost;
     if (!(cb > 0)) { showToast('Primero calcula o ingresa un costo base.', 'warning'); return; }
     if (simMode !== 'precio') setSimMode('precio');
     const precio = cb * (1 + margenPct / 100);
@@ -2026,6 +2083,7 @@ async function cargarCotizacionesImport({ reset = true } = {}) {
         updateImportQuoteCompanyOptions(j.facets);
         if (countEl) countEl.innerText = `${importQuotesAll.length}/${importQuotesTotal}`;
         renderImportQuotesList();
+        refreshSavedSimulationSelect();
     } catch (e) {
         if (e?.name === 'AbortError') return;
         console.error(e);
@@ -2483,12 +2541,9 @@ async function simularVentaDesdeCotizacion(id) {
             quoteId: String(id),
             name: record.name || 'Cotización',
             quote: structuredClone(quote),
+            originalQuoteJson: JSON.stringify(quote),
         };
-        gCostoUnitario = Number(quote.costoUnitarioUSD) || 0;
-        gCostoCaja = Number(quote.costoPorCajaUSD) || 0;
-        gUnidadesPorCaja = Number(quote.unidadesPorCaja) || 0;
-        lastImportQuote = structuredClone(quote);
-        setSimSource('calc');
+        setSimSource('saved');
         const price = Number(quote.ventaUnitarioUSD);
         const input = document.getElementById('sim-input');
         if (input && price > 0) input.value = String(price);
@@ -2503,6 +2558,71 @@ async function simularVentaDesdeCotizacion(id) {
     } catch (error) {
         showToast(error.message || 'No se pudo iniciar la simulación', 'error');
     }
+}
+
+async function guardarPlanSimulacion() {
+    const session = saleSimulationSession;
+    if (!session?.quoteId || !lastSimPlan?.ventaUnitarioUSD) {
+        showToast('Completa la simulación antes de guardar el plan.', 'warning');
+        return;
+    }
+    const button = document.getElementById('sim-save-plan');
+    if (button) button.disabled = true;
+    try {
+        const quoteToSave = {
+            ...structuredClone(session.quote),
+            ventaUnitarioUSD: Number(lastSimPlan.ventaUnitarioUSD),
+        };
+        const response = await authFetch(`/api/import-quotes/${encodeURIComponent(session.quoteId)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: session.name, quote: quoteToSave }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
+            throw new Error(data?.error?.message || data?.message || 'No se pudo guardar el plan');
+        }
+        importQuoteDetailCache.delete(session.quoteId);
+        const refreshed = await fetchImportQuoteDetail(session.quoteId, { force: true });
+        session.quote = structuredClone(refreshed.quote || {});
+        session.originalQuoteJson = JSON.stringify(session.quote);
+        await cargarCotizacionesImport();
+        const banner = document.getElementById('sim-source-banner');
+        if (banner) {
+            banner.hidden = false;
+            banner.textContent = `Plan guardado en: ${session.name}`;
+        }
+        showToast('Plan de venta guardado en la cotización', 'success');
+    } catch (error) {
+        showToast(error.message || 'No se pudo guardar el plan', 'error');
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function cancelarSimulacionGuardada() {
+    saleSimulationSession = null;
+    const input = document.getElementById('sim-input');
+    if (input) input.value = '';
+    const banner = document.getElementById('sim-source-banner');
+    if (banner) {
+        banner.hidden = true;
+        banner.textContent = '';
+    }
+    setSimSource('current');
+    showToast('Simulación cerrada sin guardar cambios', 'info');
+}
+
+function setupSaleSimulatorInteractions() {
+    document.querySelectorAll('[data-sim-source]').forEach((button) => {
+        button.addEventListener('click', () => setSimSource(button.dataset.simSource));
+    });
+    document.getElementById('sim-saved-select')?.addEventListener('change', (event) => {
+        const id = event.target.value;
+        if (id) simularVentaDesdeCotizacion(id);
+    });
+    document.getElementById('sim-save-plan')?.addEventListener('click', guardarPlanSimulacion);
+    document.getElementById('sim-cancel-saved')?.addEventListener('click', cancelarSimulacionGuardada);
 }
 
 function setupImportQuoteInteractions() {
@@ -2553,7 +2673,7 @@ async function guardarCotizacionImport() {
         // Plan de venta: usa el precio indicado o, si está vacío, el del simulador.
         const salePriceEl = document.getElementById('import-quote-sale-price');
         let salePriceUnit = parseLocaleAmount(salePriceEl?.value);
-        if (!(salePriceUnit > 0) && lastSimPlan && Number(lastSimPlan.ventaUnitarioUSD) > 0) {
+        if (!(salePriceUnit > 0) && simSource === 'current' && lastSimPlan && Number(lastSimPlan.ventaUnitarioUSD) > 0) {
             salePriceUnit = Number(lastSimPlan.ventaUnitarioUSD);
         }
         quoteToSave = applySalePlanToQuote(quoteToSave, buildSalePlanForQuote(quoteToSave, salePriceUnit));
@@ -3164,6 +3284,7 @@ async function shareRatesImage() {
     await checkAuth();
     try { await refresh(); } catch (e) { console.error('Init refresh:', e); }
     try { await loadStats(); } catch (e) { console.error('Init stats:', e); }
+    setupSaleSimulatorInteractions();
     setupImportQuoteInteractions();
     try { await cargarCotizacionesImport(); } catch (e) { console.error('Init quotes:', e); }
     resetHorizontalScroll();

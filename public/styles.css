@@ -3813,3 +3813,97 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   .c-quote-card--skeleton span,
   .c-quote-detail-skeleton span { animation: none; }
 }
+
+/* Simulador progresivo: fuente → forma de venta → resultado */
+.c-sim-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s2);
+  margin: 0 0 var(--s4);
+  padding: 0;
+  list-style: none;
+}
+.c-sim-progress li {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0 var(--s2);
+  border-radius: var(--r-full);
+  border: var(--border);
+  background: var(--bg-input);
+  color: var(--text-ghost);
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-align: center;
+}
+.c-sim-progress li.is-active,
+.c-sim-progress li:nth-child(2),
+.c-sim-progress li:nth-child(3) { color: var(--text-ink); }
+
+.c-sim-step {
+  margin-top: var(--s4);
+  padding: var(--s4);
+  border: var(--border);
+  border-radius: var(--r-lg);
+  background: rgba(0,0,0,.12);
+}
+.c-sim-step__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+  font-family: var(--font-display);
+  font-size: 0.94rem;
+  color: var(--text-ink);
+}
+.c-sim-step__title span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background: var(--accent-pale);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.c-sim-saved-wrap { margin-top: var(--s3); }
+.c-sim-saved-wrap .c-quotes-filter { width: 100%; min-height: 44px; }
+.c-sim-rate-status {
+  margin: var(--s2) 0 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+.c-sim-rate-status.is-stale { color: var(--amber); }
+.c-sim-saved-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+.c-sim-save-plan,
+.c-sim-cancel {
+  min-height: 46px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-md);
+  font-weight: 700;
+  cursor: pointer;
+}
+.c-sim-save-plan {
+  border: 1px solid rgba(14,203,129,.35);
+  background: var(--green);
+  color: #071a12;
+}
+.c-sim-save-plan:disabled { opacity: .55; cursor: progress; }
+.c-sim-cancel {
+  border: var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+}
+
+@media (max-width: 480px) {
+  .c-sim-progress li { font-size: 0.58rem; padding: 0 4px; }
+  .c-sim-step { padding: var(--s3); }
+  .c-sim-saved-actions { grid-template-columns: 1fr; }
+}
