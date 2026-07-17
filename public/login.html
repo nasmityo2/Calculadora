@@ -617,6 +617,10 @@
 
       function clearBanner(ids) { ids.forEach((id) => $(id)?.classList.remove('is-visible')); }
       function banner(boxId, txtId, text) { $(txtId).textContent = text; $(boxId).classList.add('is-visible'); }
+      function apiErrorMessage(data, fallback) {
+        if (typeof data?.error === 'string') return data.error;
+        return data?.error?.message || data?.message || fallback;
+      }
 
       function setLoading(btnId, spinnerId, iconId, textId, on, loadingText, idleText) {
         $(btnId).disabled = on;
@@ -686,9 +690,9 @@
             setTimeout(() => window.location.replace(getNextUrl()), 380);
             return;
           }
-          if (res.status === 429) banner('login-msg-warning', 'login-warn-txt', data?.error || 'Demasiados intentos. Espera 15 minutos.');
+          if (res.status === 429) banner('login-msg-warning', 'login-warn-txt', apiErrorMessage(data, 'Demasiados intentos. Espera 15 minutos.'));
           else {
-            banner('login-msg-error', 'login-err-txt', data?.error || 'Usuario o contraseña incorrectos.');
+            banner('login-msg-error', 'login-err-txt', apiErrorMessage(data, 'Usuario o contraseña incorrectos.'));
             $('f-pass').value = ''; $('f-pass').focus();
           }
         } catch (_) {
@@ -733,8 +737,8 @@
             setTimeout(() => switchTab('login'), 1800);
             return;
           }
-          if (res.status === 429) banner('reg-msg-error', 'reg-err-txt', data?.error || 'Demasiados intentos. Espera 15 minutos.');
-          else banner('reg-msg-error', 'reg-err-txt', data?.error || 'No se pudo crear la cuenta.');
+          if (res.status === 429) banner('reg-msg-error', 'reg-err-txt', apiErrorMessage(data, 'Demasiados intentos. Espera 15 minutos.'));
+          else banner('reg-msg-error', 'reg-err-txt', apiErrorMessage(data, 'No se pudo crear la cuenta.'));
         } catch (_) {
           banner('reg-msg-error', 'reg-err-txt', 'Sin conexión con el servidor. Verifica tu red.');
         } finally {

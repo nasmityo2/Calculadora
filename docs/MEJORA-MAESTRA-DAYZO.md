@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:20:00Z  
+Última actualización: 2026-07-17T08:24:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 3 — API/lista de cotizaciones
+Fase actual: 4 — UX cotizaciones
 
 ## Estados
 
@@ -17,8 +17,8 @@ Fase actual: 3 — API/lista de cotizaciones
 - [x] Fase 0 — Baseline, respaldo y mapa
 - [x] Fase 1 — Seguridad urgente
 - [x] Fase 2 — Cálculos canónicos
-- [~] Fase 3 — API/lista de cotizaciones
-- [ ] Fase 4 — UX cotizaciones
+- [x] Fase 3 — API/lista de cotizaciones
+- [~] Fase 4 — UX cotizaciones
 - [ ] Fase 5 — Simulador
 - [ ] Fase 6 — Login DAYZO
 - [ ] Fase 7 — Tasas y frescura
@@ -183,3 +183,42 @@ Fase actual: 3 — API/lista de cotizaciones
 - Resultado: gate verde.
 - Riesgo/rollback: revertir el commit; no hay migración de DB que deshacer.
 - Siguiente tarea exacta: Fase 3, reemplazar lista completa por resumen `limit<=50`/`offset` y contrato de error uniforme.
+
+## Fase 3 — API/lista de cotizaciones
+
+- ID: F3-01 / lista resumida paginada
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `docs/API-COTIZACIONES.md`.
+- Evidencia: `limit` 1–50, `offset`, orden estable, búsqueda, empresa, con/sin plan y cinco órdenes; cada item excluye `quote`; detalle permanece en `GET /:uuid`; facets de empresa y metadatos `hasMore/nextOffset`.
+- Comandos: integración con páginas 2+1, no solapadas, filtros, orden inválido y límites.
+- Resultado: API v2 documentada; adaptador `legacy=1` limitado a 20 y marcado deprecated mantiene la web anterior durante la transición.
+- Riesgo/rollback: clientes que dependan del objeto completo deben usar temporalmente `legacy=1`; Fase 4 lo elimina de la web.
+- Pendiente siguiente: carga bajo demanda en tarjetas.
+
+- ID: F3-02 / contrato de errores y aislamiento
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `public/login.html`, `public/app.js`, `test/integration/auth.test.js`.
+- Evidencia: errores API `{success:false,error:{code,message},message}`; adaptador superior mantiene mensajes legacy. Tests 400/401/403/404, UUID, CSRF, IDOR y filtros.
+- Comandos: `npm run check`.
+- Resultado: 15 unit + 3 integration verdes; login y tasas históricas interpretan objeto o string durante compatibilidad.
+- Riesgo/rollback: clientes nuevos deben usar `error.code`; `message` superior se retira solo tras mobile.
+- Pendiente siguiente: integridad DB.
+
+- ID: F3-03 / FK y política de usuario
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `test/integration/auth.test.js`.
+- Evidencia: `foreign_keys=ON`, `busy_timeout=5000`; migración transaccional preserva filas y añade `REFERENCES users(id) ON DELETE RESTRICT`; índice por usuario/actualización. Eliminar usuario con cotizaciones devuelve 409; sin cotizaciones elimina usuario y sus sesiones en transacción.
+- Comandos: test inspecciona `PRAGMA foreign_key_list(import_quotes)` y ejecuta ambos caminos de borrado.
+- Resultado: no quedan cotizaciones huérfanas ni se borran datos implícitamente.
+- Riesgo/rollback: primera ejecución reconstruye solo la tabla de cotizaciones dentro de una transacción; backup F0 verificado. Revertir código no requiere revertir el esquema porque la FK es compatible.
+- Pendiente siguiente: métricas.
+
+- ID: F3-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: backend, compatibilidad web, tests, contrato, tracker y `artifacts/phase3`.
+- Resumen git diff: paginación/consulta resumida, error uniforme, FK y política RESTRICT.
+- Comandos exactos: `npm run check`; `CAPTURE_LABEL=phase3 CAPTURE_LIGHTHOUSE=0 node scripts/capture-baseline.js`.
+- Resultado: checks verdes; 20 cotizaciones, 10,285 bytes frente a 26,461 baseline (−61.1%); 81 MB RSS; cero overflow 1440/390/360.
+- Prueba manual: capturas phase3 con login, simulador y lista legacy; API resumen verificada separadamente.
+- Riesgo/rollback: adaptador legacy evita regresión visual hasta F4; rollback de código conserva FK válida.
+- Siguiente tarea exacta: Fase 4, consumir resumen, acordeón único y detalle lazy con skeleton/reintento.

@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const test = require('node:test');
+const Database = require('better-sqlite3');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, 'src', 'server.js');
@@ -162,11 +163,19 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
     adminPassword,
     bootstrap: true,
   });
+  const schemaDb = new Database(path.join(dataDir, 'historial.db'), { readonly: true });
+  const quoteForeignKeys = schemaDb.pragma('foreign_key_list(import_quotes)');
+  schemaDb.close();
+  assert.ok(quoteForeignKeys.some((fk) => fk.table === 'users' && fk.on_delete === 'RESTRICT'));
 
   const anonymous = new SessionClient(server.baseUrl);
   let result = await anonymous.login('usuario-inexistente', viewerPassword);
   assert.equal(result.response.status, 401);
   assert.equal(result.data.success, false);
+  assert.equal(result.data.error.code, 'INVALID_CREDENTIALS');
+  result = await anonymous.request('/api/import-quotes');
+  assert.equal(result.response.status, 401);
+  assert.equal(result.data.error.code, 'AUTH_REQUIRED');
 
   for (const [username, suffix] of [[viewer1, 'uno'], [viewer2, 'dos']]) {
     result = await anonymous.request('/api/auth/register', {
@@ -206,12 +215,14 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
 
   result = await firstViewer.request('/api/auth/users');
   assert.equal(result.response.status, 403);
+  assert.equal(result.data.error.code, 'FORBIDDEN');
 
   result = await firstViewer.request('/api/import-quotes', {
     method: 'POST',
     body: { name: 'Sin CSRF', quote: quoteFixture() },
   });
   assert.equal(result.response.status, 403);
+  assert.equal(result.data.error.code, 'CSRF_INVALID');
 
   result = await firstViewer.request('/api/import-quotes', {
     method: 'POST',
@@ -234,6 +245,10 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   assert.equal(result.data.quote.quote.calculationVersion, 'dayzo-import-v2');
   assert.ok(Math.abs(result.data.quote.quote.inversionTotalUSD - 89.21) < 1e-9);
   assert.ok(Math.abs(result.data.quote.quote.costoUnitarioUSD - (89.21 / 24)) < 1e-9);
+
+  result = await firstViewer.request('/api/import-quotes/no-es-uuid');
+  assert.equal(result.response.status, 400);
+  assert.equal(result.data.error.code, 'INVALID_ID');
 
   result = await firstViewer.request(`/api/import-quotes/${quoteId}`, {
     method: 'PUT',
@@ -264,17 +279,76 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
     },
   });
   assert.equal(result.response.status, 400);
+  assert.equal(result.data.error.code, 'INCONSISTENT_TOTAL_UNITS');
+
+  for (const name of ['Producto B', 'Producto C']) {
+    result = await firstViewer.request('/api/import-quotes', {
+      method: 'POST',
+      csrfToken: viewerCsrf,
+      body: { name, quote: quoteFixture() },
+    });
+    assert.equal(result.response.status, 200);
+  }
+
+  result = await firstViewer.request('/api/import-quotes?limit=2&offset=0&sort=recent');
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.apiVersion, '2');
+  assert.equal(result.data.quotes.length, 2);
+  assert.equal(result.data.total, 3);
+  assert.equal(result.data.pagination.hasMore, true);
+  assert.equal(result.data.pagination.nextOffset, 2);
+  assert.equal(Object.hasOwn(result.data.quotes[0], 'quote'), false);
+  const firstPageIds = result.data.quotes.map((quote) => quote.id);
+
+  result = await firstViewer.request('/api/import-quotes?limit=2&offset=2&sort=recent');
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.quotes.length, 1);
+  assert.equal(result.data.pagination.hasMore, false);
+  assert.equal(firstPageIds.includes(result.data.quotes[0].id), false);
+
+  result = await firstViewer.request('/api/import-quotes?limit=20&search=Aislada&plan=with');
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.total, 1);
+  assert.equal(result.data.quotes[0].hasSalePlan, true);
+
+  result = await firstViewer.request('/api/import-quotes?legacy=1&limit=20');
+  assert.equal(result.response.status, 200);
+  assert.ok(result.data.deprecation);
+  assert.equal(typeof result.data.quotes[0].quote, 'object');
+
+  for (const query of ['limit=51', 'offset=-1', 'sort=desconocido', 'plan=quizas']) {
+    result = await firstViewer.request(`/api/import-quotes?${query}`);
+    assert.equal(result.response.status, 400);
+    assert.equal(typeof result.data.error.code, 'string');
+    assert.equal(typeof result.data.error.message, 'string');
+  }
 
   const secondViewer = new SessionClient(server.baseUrl);
   result = await secondViewer.login(viewer2, viewerPassword);
   const secondCsrf = result.data.csrfToken;
   result = await secondViewer.request(`/api/import-quotes/${quoteId}`);
   assert.equal(result.response.status, 404);
+  assert.equal(result.data.error.code, 'QUOTE_NOT_FOUND');
   result = await secondViewer.request(`/api/import-quotes/${quoteId}`, {
     method: 'DELETE',
     csrfToken: secondCsrf,
   });
   assert.equal(result.response.status, 404);
+
+  result = await admin.request('/api/auth/users');
+  const viewerOneRecord = result.data.users.find((user) => user.username === viewer1);
+  const viewerTwoRecord = result.data.users.find((user) => user.username === viewer2);
+  result = await admin.request(`/api/auth/users/${viewerOneRecord.id}`, {
+    method: 'DELETE',
+    csrfToken: adminCsrf,
+  });
+  assert.equal(result.response.status, 409);
+  assert.equal(result.data.error.code, 'USER_HAS_QUOTES');
+  result = await admin.request(`/api/auth/users/${viewerTwoRecord.id}`, {
+    method: 'DELETE',
+    csrfToken: adminCsrf,
+  });
+  assert.equal(result.response.status, 200);
 
   result = await firstViewer.request('/api/auth/logout', {
     method: 'POST',

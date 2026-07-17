@@ -110,6 +110,8 @@ const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous  = NORMAL');
 db.pragma('cache_size   = -8000'); // 8 MB de cache
+db.pragma('busy_timeout = 5000');
+db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS tasas (
@@ -135,6 +137,7 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_import_quotes_user ON import_quotes (user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_import_quotes_user_updated ON import_quotes (user_id, updated_at DESC, id);
 
   CREATE TABLE IF NOT EXISTS users (
     id         TEXT PRIMARY KEY,
@@ -184,6 +187,23 @@ app.use(sessionMiddleware);
 
 const DUMMY_BCRYPT_HASH = bcrypt.hashSync('__dummy_timing__', 12);
 
+function apiErrorBody(code, message, details) {
+  return {
+    success: false,
+    error: {
+      code,
+      message,
+      ...(details === undefined ? {} : { details }),
+    },
+    // Adaptador temporal para clientes web/móviles que todavía leen `message`.
+    message,
+  };
+}
+
+function sendApiError(res, status, code, message, details) {
+  return res.status(status).json(apiErrorBody(code, message, details));
+}
+
 // ─── SECCIÓN: RATE LIMITERS ─────────────────────────────────────────────────
 
 const authLimiter = rateLimit({
@@ -191,7 +211,7 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Demasiados intentos. Intenta en 15 minutos.' },
+  message: apiErrorBody('RATE_LIMITED', 'Demasiados intentos. Intenta en 15 minutos.'),
 });
 
 const tasasLimiter = rateLimit({
@@ -199,7 +219,7 @@ const tasasLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes. Intenta en un momento.' },
+  message: apiErrorBody('RATE_LIMITED', 'Demasiadas solicitudes. Intenta en un momento.'),
 });
 
 // Limita las mutaciones de cotizaciones (defensa en profundidad sobre requireAuth)
@@ -208,7 +228,7 @@ const mutationLimiter = rateLimit({
   max: 40,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Demasiadas operaciones. Espera un momento.' },
+  message: apiErrorBody('RATE_LIMITED', 'Demasiadas operaciones. Espera un momento.'),
 });
 
 // ─── SECCIÓN: PROTECCIÓN FUERZA BRUTA (login) ───────────────────────────────
@@ -252,7 +272,7 @@ function csrfProtect(req, res, next) {
   const headerToken  = req.headers['x-csrf-token'];
 
   if (!sessionToken || !headerToken || sessionToken !== headerToken) {
-    return res.status(403).json({ error: 'Token CSRF inválido' });
+    return sendApiError(res, 403, 'CSRF_INVALID', 'Token CSRF inválido');
   }
   next();
 }
@@ -298,11 +318,11 @@ app.use(csrfProtect);
 // ─── SECCIÓN: POLÍTICAS / MIDDLEWARE DE AUTH ────────────────────────────────
 
 function requireAuth(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'No autenticado' });
+  if (!req.session?.userId) return sendApiError(res, 401, 'AUTH_REQUIRED', 'No autenticado');
   const user = db.prepare('SELECT id, username, full_name, email, role FROM users WHERE id = ?').get(req.session.userId);
   if (!user) {
     req.session.destroy(() => {});
-    return res.status(401).json({ error: 'Sesión inválida' });
+    return sendApiError(res, 401, 'SESSION_INVALID', 'Sesión inválida');
   }
   req.session.role = user.role;
   req.user = user;
@@ -311,7 +331,7 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (req.user?.role === 'admin') return next();
-  res.status(403).json({ error: 'Sin permisos' });
+  return sendApiError(res, 403, 'FORBIDDEN', 'Sin permisos');
 }
 
 // ─── SECCIÓN: MIGRACIONES DE ARRANQUE ───────────────────────────────────────
@@ -365,6 +385,48 @@ function assignOrphanImportQuotesToAdmin() {
   if (result.changes > 0) log.info(`Migración: ${result.changes} cotizaciones sin dueño asignadas al admin`);
 }
 
+function ensureImportQuotesForeignKey() {
+  const foreignKeys = db.pragma('foreign_key_list(import_quotes)');
+  if (foreignKeys.some((fk) => fk.table === 'users' && fk.from === 'user_id')) return;
+
+  const migrate = db.transaction(() => {
+    const admin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+    if (admin) {
+      db.prepare(`
+        UPDATE import_quotes
+        SET user_id = ?
+        WHERE user_id IS NULL OR user_id NOT IN (SELECT id FROM users)
+      `).run(admin.id);
+    } else {
+      db.prepare(`
+        UPDATE import_quotes
+        SET user_id = NULL
+        WHERE user_id IS NOT NULL AND user_id NOT IN (SELECT id FROM users)
+      `).run();
+    }
+
+    db.exec(`
+      CREATE TABLE import_quotes_fk (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        quote      TEXT NOT NULL,
+        user_id    TEXT REFERENCES users(id) ON DELETE RESTRICT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO import_quotes_fk (id, name, quote, user_id, created_at, updated_at)
+      SELECT id, name, quote, user_id, created_at, updated_at FROM import_quotes;
+      DROP TABLE import_quotes;
+      ALTER TABLE import_quotes_fk RENAME TO import_quotes;
+      CREATE INDEX idx_import_quotes_user ON import_quotes (user_id, created_at DESC);
+      CREATE INDEX idx_import_quotes_user_updated ON import_quotes (user_id, updated_at DESC, id);
+    `);
+  });
+
+  migrate();
+  log.info('Migración: import_quotes.user_id protegido con FK ON DELETE RESTRICT.');
+}
+
 async function bootstrapAdminUser() {
   const existing = db.prepare('SELECT id FROM users WHERE role = ? LIMIT 1').get('admin');
   const requested = process.env.ADMIN_BOOTSTRAP === '1';
@@ -409,6 +471,7 @@ async function bootstrapAdminUser() {
 
 migrateImportQuotesFromJSON();
 assignOrphanImportQuotesToAdmin();
+ensureImportQuotesForeignKey();
 
 // ─── SECCIÓN: SENTENCIAS PREPARADAS ─────────────────────────────────────────
 // Se compilan una sola vez al arrancar (no en cada request).
@@ -525,7 +588,6 @@ const stmtBcvCambios = db.prepare(`
 `);
 const stmtBcvUltimoAntes = db.prepare('SELECT bcv FROM tasas WHERE bcv > 0 AND timestamp < ? ORDER BY timestamp DESC LIMIT 1');
 
-const stmtImportQuotesByUser = db.prepare('SELECT * FROM import_quotes WHERE user_id = ? ORDER BY created_at DESC LIMIT 1000');
 const stmtImportQuoteForUser = db.prepare('SELECT * FROM import_quotes WHERE id = ? AND user_id = ?');
 const stmtImportQuoteInsert  = db.prepare(`
   INSERT INTO import_quotes (id, name, quote, user_id, created_at, updated_at)
@@ -538,6 +600,28 @@ const stmtImportQuoteUpdate = db.prepare(`
 const stmtImportQuoteDelete      = db.prepare('DELETE FROM import_quotes WHERE id = ? AND user_id = ?');
 const stmtImportQuoteCountByUser = db.prepare('SELECT COUNT(*) AS c FROM import_quotes WHERE user_id = ?');
 const stmtImportQuoteCount       = db.prepare('SELECT COUNT(*) AS c FROM import_quotes');
+
+const IMPORT_QUOTE_COMPANY_SQL = `
+  COALESCE(
+    NULLIF(json_extract(quote, '$.empresaNombre'), ''),
+    CASE CAST(COALESCE(
+      json_extract(quote, '$.empresaTarifaUSD'),
+      json_extract(quote, '$.empresaEnvioUSD')
+    ) AS REAL)
+      WHEN 770 THEN 'GCCARGO'
+      WHEN 865 THEN 'Orinoco'
+      WHEN 1030 THEN 'import2ven'
+      ELSE 'Personalizado'
+    END
+  )
+`;
+const stmtImportQuoteCompanies = db.prepare(`
+  SELECT ${IMPORT_QUOTE_COMPANY_SQL} AS company, COUNT(*) AS count
+  FROM import_quotes
+  WHERE user_id = ?
+  GROUP BY company
+  ORDER BY company COLLATE NOCASE ASC
+`);
 
 // ─── SECCIÓN: BCV VIGENTE (facturación) ─────────────────────────────────────
 // Reglas (BCV + Art. 25 Ley IVA):
@@ -825,6 +909,7 @@ function mapImportQuoteListItem(row) {
     id: row.id,
     name: row.name,
     createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
     empresaNombre,
     empresaTarifaUSD:  tarifaUSD,
     inversionTotalUSD: quote.inversionTotalUSD ?? null,
@@ -836,13 +921,8 @@ function mapImportQuoteListItem(row) {
     ventaUnitarioUSD:  quote.ventaUnitarioUSD  ?? null,
     gananciaTotalUSD:  quote.gananciaTotalUSD  ?? null,
     margenVentaPct:    quote.margenVentaPct    ?? null,
-    // Cotización completa: permite renderizar tarjetas informativas en el
-    // listado sin una petición por fila (el cliente ya tiene todo el desglose).
-    quote: {
-      ...quote,
-      empresaNombre:    quote.empresaNombre    ?? empresaNombre,
-      empresaTarifaUSD: quote.empresaTarifaUSD ?? tarifaUSD,
-    },
+    hasSalePlan: Number(quote.ventaUnitarioUSD) > 0,
+    calculationVersion: quote.calculationVersion || 'legacy',
   };
 }
 
@@ -884,6 +964,124 @@ function prepareIncomingQuote(rawQuote) {
     capturedAt: new Date().toISOString(),
   };
   return { ok: true, value: quote };
+}
+
+const IMPORT_QUOTE_SORT_SQL = Object.freeze({
+  recent: 'created_at DESC, id DESC',
+  investment: "CAST(COALESCE(json_extract(quote, '$.inversionTotalUSD'), 0) AS REAL) DESC, created_at DESC, id DESC",
+  name: 'name COLLATE NOCASE ASC, created_at DESC, id DESC',
+  company: `${IMPORT_QUOTE_COMPANY_SQL} COLLATE NOCASE ASC, created_at DESC, id DESC`,
+  profit: "CAST(COALESCE(json_extract(quote, '$.gananciaTotalUSD'), 0) AS REAL) DESC, created_at DESC, id DESC",
+});
+const importQuoteListStatementCache = new Map();
+
+function parseImportQuoteListQuery(query) {
+  const rawLimit = query.limit == null ? '20' : String(query.limit);
+  const rawOffset = query.offset == null ? '0' : String(query.offset);
+  if (!/^\d+$/.test(rawLimit) || !/^\d+$/.test(rawOffset)) {
+    return { ok: false, code: 'INVALID_PAGINATION', message: 'limit y offset deben ser enteros no negativos.' };
+  }
+  const limit = Number(rawLimit);
+  const offset = Number(rawOffset);
+  if (limit < 1 || limit > 50 || !Number.isSafeInteger(offset) || offset > 1_000_000) {
+    return { ok: false, code: 'INVALID_PAGINATION', message: 'limit debe estar entre 1 y 50; offset no puede superar 1000000.' };
+  }
+
+  const sortAlias = { inversion: 'investment', nombre: 'name', empresa: 'company', ganancia: 'profit' };
+  const requestedSort = V.cleanString(query.sort || 'recent', 32).toLowerCase();
+  const sort = sortAlias[requestedSort] || requestedSort;
+  if (!IMPORT_QUOTE_SORT_SQL[sort]) {
+    return { ok: false, code: 'INVALID_SORT', message: 'Orden de cotizaciones inválido.' };
+  }
+
+  const plan = V.cleanString(query.plan || 'all', 16).toLowerCase();
+  if (!['all', 'with', 'without'].includes(plan)) {
+    return { ok: false, code: 'INVALID_FILTER', message: 'Filtro de plan inválido.' };
+  }
+  const legacy = query.legacy === '1';
+  if (legacy && limit > 20) {
+    return { ok: false, code: 'LEGACY_LIMIT_EXCEEDED', message: 'El adaptador legacy admite un máximo de 20 cotizaciones.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      limit,
+      offset,
+      sort,
+      plan,
+      search: V.cleanString(query.search, 120),
+      company: V.cleanString(query.company, 120),
+      legacy,
+    },
+  };
+}
+
+function getImportQuoteListStatements(sort) {
+  if (importQuoteListStatementCache.has(sort)) return importQuoteListStatementCache.get(sort);
+  const where = `
+    user_id = @userId
+    AND (@search = '' OR instr(lower(name), lower(@search)) > 0)
+    AND (@company = '' OR ${IMPORT_QUOTE_COMPANY_SQL} = @company)
+    AND (
+      @plan = 'all'
+      OR (@plan = 'with' AND CAST(COALESCE(json_extract(quote, '$.ventaUnitarioUSD'), 0) AS REAL) > 0)
+      OR (@plan = 'without' AND CAST(COALESCE(json_extract(quote, '$.ventaUnitarioUSD'), 0) AS REAL) <= 0)
+    )
+  `;
+  const statements = {
+    list: db.prepare(`
+      SELECT id, name, quote, created_at, updated_at
+      FROM import_quotes
+      WHERE ${where}
+      ORDER BY ${IMPORT_QUOTE_SORT_SQL[sort]}
+      LIMIT @limit OFFSET @offset
+    `),
+    count: db.prepare(`SELECT COUNT(*) AS c FROM import_quotes WHERE ${where}`),
+  };
+  importQuoteListStatementCache.set(sort, statements);
+  return statements;
+}
+
+function listImportQuotesForUser(userId, options) {
+  const statements = getImportQuoteListStatements(options.sort);
+  const filters = {
+    userId,
+    search: options.search,
+    company: options.company,
+    plan: options.plan,
+  };
+  const total = statements.count.get(filters).c;
+  const rows = statements.list.all({
+    ...filters,
+    limit: options.limit,
+    offset: options.offset,
+  });
+  const quotes = rows.map((row) => {
+    const summary = mapImportQuoteListItem(row);
+    if (!options.legacy) return summary;
+    return { ...summary, quote: mapImportQuoteDetail(row).quote };
+  });
+  return {
+    quotes,
+    total,
+    pagination: {
+      limit: options.limit,
+      offset: options.offset,
+      total,
+      hasMore: options.offset + quotes.length < total,
+      nextOffset: options.offset + quotes.length < total
+        ? options.offset + quotes.length
+        : null,
+    },
+    facets: {
+      companies: stmtImportQuoteCompanies.all(userId).map((row) => ({
+        name: row.company,
+        count: row.count,
+      })),
+    },
+    ...(options.legacy ? { deprecation: 'legacy=1 se retirará después de migrar los clientes a resumen/detalle.' } : {}),
+  };
 }
 
 // ─── SECCIÓN: SCRAPING / FUENTES EXTERNAS (sin cambios de lógica) ───────────
@@ -1102,7 +1300,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
       const attempts = getLoginAttempts(ip);
       if (attempts >= 3) await sleep(Math.min(attempts * 500, 5000));
       recordFailedLogin(ip);
-      return res.status(401).json({ success: false, error: 'Usuario o contraseña incorrectos' });
+      return sendApiError(res, 401, 'INVALID_CREDENTIALS', 'Usuario o contraseña incorrectos');
     }
 
     clearLoginAttempts(ip);
@@ -1111,7 +1309,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     req.session.regenerate((regenErr) => {
       if (regenErr) {
         log.error('Session regenerate error:', regenErr.message);
-        return res.status(500).json({ success: false, error: 'Error interno' });
+        return sendApiError(res, 500, 'SESSION_REGENERATE_FAILED', 'Error interno');
       }
       req.session.userId    = user.id;
       req.session.role      = user.role;
@@ -1119,7 +1317,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
       req.session.save((saveErr) => {
         if (saveErr) {
           log.error('Session save error:', saveErr.message);
-          return res.status(500).json({ success: false, error: 'Error interno' });
+          return sendApiError(res, 500, 'SESSION_SAVE_FAILED', 'Error interno');
         }
         db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Date.now(), user.id);
         res.json({
@@ -1135,7 +1333,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
 
 app.post('/api/auth/logout', (req, res) => {
   req.session.destroy((err) => {
-    if (err) return res.status(500).json({ success: false, error: 'Error al cerrar sesión' });
+    if (err) return sendApiError(res, 500, 'LOGOUT_FAILED', 'Error al cerrar sesión');
     res.clearCookie('dayzo.sid', { path: '/' });
     res.json({ success: true });
   });
@@ -1163,13 +1361,13 @@ app.post('/api/auth/register', authLimiter, async (req, res, next) => {
     const password = (req.body?.password || '').toString();
 
     const nameError = V.validateFullName(fullName);
-    if (nameError) return res.status(400).json({ success: false, error: nameError });
+    if (nameError) return sendApiError(res, 400, 'INVALID_FULL_NAME', nameError);
     const userError = V.validateUsername(username);
-    if (userError) return res.status(400).json({ success: false, error: userError });
+    if (userError) return sendApiError(res, 400, 'INVALID_USERNAME', userError);
     const emailError = V.validateEmail(email);
-    if (emailError) return res.status(400).json({ success: false, error: emailError });
+    if (emailError) return sendApiError(res, 400, 'INVALID_EMAIL', emailError);
     const passError = V.validatePassword(password);
-    if (passError) return res.status(400).json({ success: false, error: passError });
+    if (passError) return sendApiError(res, 400, 'INVALID_PASSWORD', passError);
 
     const hash = await bcrypt.hash(password, 12);
     const id   = crypto.randomUUID();
@@ -1182,7 +1380,7 @@ app.post('/api/auth/register', authLimiter, async (req, res, next) => {
       const msg = String(e.message).includes('.email')
         ? 'El correo ya está registrado.'
         : 'Ese nombre de usuario ya está en uso.';
-      return res.status(409).json({ success: false, error: msg });
+      return sendApiError(res, 409, 'USER_ALREADY_EXISTS', msg);
     }
     next(e);
   }
@@ -1197,14 +1395,14 @@ app.post('/api/auth/users', requireAuth, requireAdmin, async (req, res, next) =>
     const email    = V.cleanString(req.body?.email, 254).toLowerCase() || null;
 
     const userError = V.validateUsername(username);
-    if (userError) return res.status(400).json({ success: false, error: userError });
-    if (role !== 'admin' && role !== 'viewer') return res.status(400).json({ success: false, error: 'Rol inválido' });
+    if (userError) return sendApiError(res, 400, 'INVALID_USERNAME', userError);
+    if (role !== 'admin' && role !== 'viewer') return sendApiError(res, 400, 'INVALID_ROLE', 'Rol inválido');
     if (email) {
       const emailError = V.validateEmail(email);
-      if (emailError) return res.status(400).json({ success: false, error: emailError });
+      if (emailError) return sendApiError(res, 400, 'INVALID_EMAIL', emailError);
     }
     const passError = V.validatePassword(password);
-    if (passError) return res.status(400).json({ success: false, error: passError });
+    if (passError) return sendApiError(res, 400, 'INVALID_PASSWORD', passError);
 
     const hash = await bcrypt.hash(password, 12);
     const id   = crypto.randomUUID();
@@ -1213,7 +1411,7 @@ app.post('/api/auth/users', requireAuth, requireAdmin, async (req, res, next) =>
     res.json({ success: true, id });
   } catch (e) {
     if (String(e.message).includes('UNIQUE')) {
-      return res.status(409).json({ success: false, error: 'El usuario ya existe' });
+      return sendApiError(res, 409, 'USER_ALREADY_EXISTS', 'El usuario ya existe');
     }
     next(e);
   }
@@ -1226,10 +1424,37 @@ app.get('/api/auth/users', requireAuth, requireAdmin, (req, res) => {
 
 app.delete('/api/auth/users/:id', requireAuth, requireAdmin, (req, res) => {
   if (req.params.id === req.session.userId) {
-    return res.status(400).json({ success: false, error: 'No puedes eliminar tu propio usuario' });
+    return sendApiError(res, 400, 'SELF_DELETE_FORBIDDEN', 'No puedes eliminar tu propio usuario');
   }
-  const result = db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ success: false, error: 'Usuario no encontrado' });
+  if (!V.isUUID(req.params.id)) {
+    return sendApiError(res, 400, 'INVALID_ID', 'Identificador inválido');
+  }
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return sendApiError(res, 404, 'USER_NOT_FOUND', 'Usuario no encontrado');
+  const quoteCount = stmtImportQuoteCountByUser.get(user.id).c;
+  if (quoteCount > 0) {
+    return sendApiError(
+      res,
+      409,
+      'USER_HAS_QUOTES',
+      'No se puede eliminar el usuario mientras tenga cotizaciones. Transfiere o elimina sus datos primero.',
+      { quoteCount }
+    );
+  }
+
+  const removeUser = db.transaction(() => {
+    const sessions = db.prepare('SELECT sid, sess FROM sessions').all();
+    const deleteSession = db.prepare('DELETE FROM sessions WHERE sid = ?');
+    for (const row of sessions) {
+      try {
+        if (JSON.parse(row.sess)?.userId === user.id) deleteSession.run(row.sid);
+      } catch (_) {
+        // Una sesión corrupta no debe impedir la política RESTRICT del usuario.
+      }
+    }
+    db.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+  });
+  removeUser();
   res.json({ success: true });
 });
 
@@ -1299,24 +1524,24 @@ app.get('/api/tasas-historicas', tasasLimiter, (req, res, next) => {
     const hora  = V.cleanString(req.query.hora, 5);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-      return res.status(400).json({ error: 'Fecha inválida. Usa el formato AAAA-MM-DD.' });
+      return sendApiError(res, 400, 'INVALID_DATE', 'Fecha inválida. Usa el formato AAAA-MM-DD.');
     }
     if (hora && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
-      return res.status(400).json({ error: 'Hora inválida. Usa el formato HH:MM (24h).' });
+      return sendApiError(res, 400, 'INVALID_TIME', 'Hora inválida. Usa el formato HH:MM (24h).');
     }
     const baseDate = new Date(`${fecha}T${hora || '23:59'}:59.999-04:00`);
     if (Number.isNaN(baseDate.getTime())) {
-      return res.status(400).json({ error: 'Fecha inválida.' });
+      return sendApiError(res, 400, 'INVALID_DATE', 'Fecha inválida.');
     }
     const hoyCaracas = BcvVigencia.fechaCaracas(new Date());
     if (fecha > hoyCaracas) {
-      return res.status(400).json({ error: 'La fecha no puede ser futura.' });
+      return sendApiError(res, 400, 'FUTURE_DATE', 'La fecha no puede ser futura.');
     }
 
     const ts  = Math.min(baseDate.getTime(), Date.now());
     const row = stmtHistAt.get(ts);
     if (!row) {
-      return res.status(404).json({ error: 'No hay tasas guardadas para esa fecha (es anterior al inicio del historial).' });
+      return sendApiError(res, 404, 'HISTORICAL_RATE_NOT_FOUND', 'No hay tasas guardadas para esa fecha (es anterior al inicio del historial).');
     }
 
     const resolved   = resolveBcvVigenteFecha(fecha);
@@ -1357,25 +1582,26 @@ app.get('/api/tasas-historicas', tasasLimiter, (req, res, next) => {
 // ─── SECCIÓN: API COTIZACIONES DE IMPORTACIÓN (por usuario) ─────────────────
 
 app.get('/api/import-quotes', requireAuth, (req, res) => {
-  const rows   = stmtImportQuotesByUser.all(req.user.id);
-  const quotes = rows.map(mapImportQuoteListItem);
-  res.json({ success: true, total: quotes.length, quotes });
+  const parsed = parseImportQuoteListQuery(req.query);
+  if (!parsed.ok) return sendApiError(res, 400, parsed.code, parsed.message);
+  const result = listImportQuotesForUser(req.user.id, parsed.value);
+  res.json({ success: true, apiVersion: '2', ...result });
 });
 
 app.get('/api/import-quotes/:id', requireAuth, (req, res) => {
-  if (!V.isUUID(req.params.id)) return res.status(400).json({ success: false, message: 'Identificador inválido' });
+  if (!V.isUUID(req.params.id)) return sendApiError(res, 400, 'INVALID_ID', 'Identificador inválido');
   const row = stmtImportQuoteForUser.get(String(req.params.id), req.user.id);
-  if (!row) return res.status(404).json({ success: false, message: 'Cotizacion no encontrada' });
-  res.json({ success: true, quote: mapImportQuoteDetail(row) });
+  if (!row) return sendApiError(res, 404, 'QUOTE_NOT_FOUND', 'Cotización no encontrada');
+  res.json({ success: true, apiVersion: '2', quote: mapImportQuoteDetail(row) });
 });
 
 app.post('/api/import-quotes', requireAuth, mutationLimiter, (req, res, next) => {
   try {
     const cleanName = V.cleanString(req.body?.name, 120);
-    if (!cleanName) return res.status(400).json({ success: false, message: 'Falta el nombre' });
+    if (!cleanName) return sendApiError(res, 400, 'INVALID_NAME', 'Falta el nombre');
 
     const prepared = prepareIncomingQuote(req.body?.quote);
-    if (!prepared.ok) return res.status(400).json({ success: false, message: prepared.error });
+    if (!prepared.ok) return sendApiError(res, 400, prepared.code || 'INVALID_QUOTE', prepared.error);
 
     const now = Date.now();
     const id  = crypto.randomUUID();
@@ -1392,15 +1618,15 @@ app.post('/api/import-quotes', requireAuth, mutationLimiter, (req, res, next) =>
 
 app.put('/api/import-quotes/:id', requireAuth, mutationLimiter, (req, res, next) => {
   try {
-    if (!V.isUUID(req.params.id)) return res.status(400).json({ success: false, message: 'Identificador inválido' });
+    if (!V.isUUID(req.params.id)) return sendApiError(res, 400, 'INVALID_ID', 'Identificador inválido');
     const row = stmtImportQuoteForUser.get(String(req.params.id), req.user.id);
-    if (!row) return res.status(404).json({ success: false, message: 'Cotizacion no encontrada' });
+    if (!row) return sendApiError(res, 404, 'QUOTE_NOT_FOUND', 'Cotización no encontrada');
 
     const cleanName = V.cleanString(req.body?.name, 120);
     let nextQuote   = parseImportQuoteRow(row).quote;
     if (req.body?.quote != null) {
       const prepared = prepareIncomingQuote(req.body.quote);
-      if (!prepared.ok) return res.status(400).json({ success: false, message: prepared.error });
+      if (!prepared.ok) return sendApiError(res, 400, prepared.code || 'INVALID_QUOTE', prepared.error);
       nextQuote = prepared.value;
     }
 
@@ -1408,7 +1634,7 @@ app.put('/api/import-quotes/:id', requireAuth, mutationLimiter, (req, res, next)
       id: row.id, user_id: req.user.id,
       name: cleanName || row.name, quote: JSON.stringify(nextQuote), updated_at: Date.now(),
     });
-    if (result.changes === 0) return res.status(404).json({ success: false, message: 'Cotizacion no encontrada' });
+    if (result.changes === 0) return sendApiError(res, 404, 'QUOTE_NOT_FOUND', 'Cotización no encontrada');
     res.json({ success: true, id: row.id });
   } catch (e) {
     next(e);
@@ -1417,9 +1643,9 @@ app.put('/api/import-quotes/:id', requireAuth, mutationLimiter, (req, res, next)
 
 app.delete('/api/import-quotes/:id', requireAuth, mutationLimiter, (req, res, next) => {
   try {
-    if (!V.isUUID(req.params.id)) return res.status(400).json({ success: false, message: 'Identificador inválido' });
+    if (!V.isUUID(req.params.id)) return sendApiError(res, 400, 'INVALID_ID', 'Identificador inválido');
     const result = stmtImportQuoteDelete.run(String(req.params.id), req.user.id);
-    if (result.changes === 0) return res.status(404).json({ success: false, message: 'Cotizacion no encontrada' });
+    if (result.changes === 0) return sendApiError(res, 404, 'QUOTE_NOT_FOUND', 'Cotización no encontrada');
     const total = stmtImportQuoteCountByUser.get(req.user.id).c;
     res.json({ success: true, total });
   } catch (e) {
@@ -1431,7 +1657,7 @@ app.delete('/api/import-quotes/:id', requireAuth, mutationLimiter, (req, res, ne
 
 // 404 para rutas API desconocidas
 app.use('/api', (req, res) => {
-  res.status(404).json({ error: 'Recurso no encontrado' });
+  sendApiError(res, 404, 'API_NOT_FOUND', 'Recurso no encontrado');
 });
 
 // Handler de errores global (último middleware)
@@ -1439,10 +1665,12 @@ app.use('/api', (req, res) => {
 app.use((err, req, res, next) => {
   const status = err.status || 500;
   if (status >= 500) log.error(`${req.method} ${req.path} →`, err.message);
-  res.status(status).json({
-    error: IS_PROD ? 'Error interno del servidor' : err.message,
-    ...(IS_PROD ? {} : { stack: err.stack }),
-  });
+  const message = IS_PROD ? 'Error interno del servidor' : err.message;
+  res.status(status).json(apiErrorBody(
+    status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR',
+    message,
+    IS_PROD ? undefined : { stack: err.stack }
+  ));
 });
 
 // ─── SECCIÓN: WEBSOCKET ─────────────────────────────────────────────────────

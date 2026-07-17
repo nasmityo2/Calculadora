@@ -837,7 +837,10 @@ async function aplicarTasaHistorica() {
         const r = await fetch('/api/tasas-historicas?' + params.toString());
         const j = await r.json();
         if (!r.ok) {
-            showToast(j?.error || 'No hay datos para esa fecha', 'error', 4000);
+            const message = typeof j?.error === 'string'
+                ? j.error
+                : (j?.error?.message || j?.message || 'No hay datos para esa fecha');
+            showToast(message, 'error', 4000);
             return;
         }
         histMode = j;
@@ -1946,7 +1949,8 @@ async function cargarCotizacionesImport() {
         return;
     }
     try {
-        const r = await authFetch('/api/import-quotes');
+        // Adaptador temporal hasta que la lista compacta consuma resumen+detalle.
+        const r = await authFetch('/api/import-quotes?legacy=1&limit=20');
         if (r.status === 401) return;
         const j = await r.json();
         importQuotesAll = (j && j.quotes) ? j.quotes : [];

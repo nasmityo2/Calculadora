@@ -7,7 +7,8 @@ const { spawn } = require('child_process');
 const { chromium } = require('@playwright/test');
 
 const ROOT = path.resolve(__dirname, '..');
-const OUT_DIR = path.join(ROOT, 'artifacts', 'baseline');
+const CAPTURE_LABEL = (process.env.CAPTURE_LABEL || 'baseline').replace(/[^a-z0-9_-]/gi, '');
+const OUT_DIR = path.join(ROOT, 'artifacts', CAPTURE_LABEL);
 const DATA_DIR = path.join(OUT_DIR, 'data');
 const PORT = Number(process.env.BASELINE_PORT || 3101);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -226,7 +227,9 @@ async function main() {
     viewports.desktop1440 = await captureViewport(browser, 1440, '1440');
     viewports.mobile390 = await captureViewport(browser, 390, '390');
     viewports.mobile360 = await captureViewport(browser, 360, '360');
-    const lighthouseScores = await captureLighthouse();
+    const lighthouseScores = process.env.CAPTURE_LIGHTHOUSE === '0'
+      ? null
+      : await captureLighthouse();
 
     const sizes = {};
     for (const relative of ['public/index.html', 'public/app.js', 'public/styles.css', 'public/login.html', 'public/tailwind.css']) {
