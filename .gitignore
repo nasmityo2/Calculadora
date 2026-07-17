@@ -17,6 +17,9 @@ data/backups/
 /backups/
 artifacts/*/data/
 artifacts/*/pm2-data*/
+# Capturas baseline/regresión (regenerar con npm run capture:baseline)
+artifacts/**/*.png
+artifacts/**/lighthouse-*.json
 .tmp/
 test-results/
 playwright-report/
