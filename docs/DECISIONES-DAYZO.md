@@ -56,7 +56,10 @@
 ## ADR-007 — Dependencias visuales self-hosted
 
 - Estado: aceptada.
-- Decisión: fijar y servir localmente Chart.js/iconos esenciales o reemplazar iconos decorativos por texto/SVG local; eliminar inline handlers antes de retirar `unsafe-inline`.
+- Decisión: servir Chart.js 4.5.1 y Font Awesome Free 7.3.1 desde versiones fijadas por `package-lock`, exponiendo solo rutas allowlist; logo/manifest usan SVG local. Se eliminaron handlers/scripts inline y CDNs. Tipografías usan stacks del sistema.
+- Necesidad/costo: Chart.js conserva el gráfico existente; Font Awesome evita reescribir decenas de iconos en el mismo cambio. Son assets de navegador, no se `require()` en Node y no añaden heap al proceso; sí añaden disco de instalación y bytes transferidos cacheables.
+- Licencias: Chart.js MIT; Font Awesome Free combina código MIT, fuentes SIL OFL 1.1 e iconos CC BY 4.0.
+- Alternativa sin dependencia: Canvas/SVG e iconos propios reducirían disco pero amplían código y riesgo visual; queda como optimización posterior medible.
 - Motivo: CSP estricta, disponibilidad y build reproducible.
 - Alternativas descartadas: CDN “latest” y múltiples hosts sin SRI.
 - Riesgo/rollback: aumento pequeño de archivos estáticos; restaurar referencias fijadas con SRI si un asset local falla.

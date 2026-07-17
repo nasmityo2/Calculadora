@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T09:00:00Z  
+Última actualización: 2026-07-17T09:17:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 8 — Modularización/performance/CSP
+Fase actual: 9 — VPS 1 GB
 
 ## Estados
 
@@ -22,8 +22,8 @@ Fase actual: 8 — Modularización/performance/CSP
 - [x] Fase 5 — Simulador
 - [x] Fase 6 — Login DAYZO
 - [x] Fase 7 — Tasas y frescura
-- [~] Fase 8 — Modularización/performance/CSP
-- [ ] Fase 9 — VPS 1 GB
+- [x] Fase 8 — Modularización/performance/CSP
+- [~] Fase 9 — VPS 1 GB
 - [ ] Fase 10 — Cierre web
 - [ ] Fase 11 — Mobile, después del gate web
 
@@ -388,3 +388,43 @@ Fase actual: 8 — Modularización/performance/CSP
 - Prueba manual: UI indica CNY estimado y datos stale cuando no existe éxito nuevo.
 - Riesgo/rollback: revertir F7 restaura aliases únicamente, pero reintroduce falsa frescura/TLS débil; no recomendado.
 - Siguiente tarea exacta: Fase 8, retirar renderer/handlers legacy, self-host assets, endurecer CSP y WebSocket.
+
+## Fase 8 — Modularización, performance y CSP
+
+- ID: F8-01 / módulos y CSS
+- Estado: [x] COMPLETADO
+- Archivos: `public/js/auth.js`, `sale-calculations.js`, `rates-socket.js`, `url-utils.js`, `public/css/tokens.css`, `public/css/auth.css`, `public/app.js`, `public/styles.css`.
+- Evidencia: extracción incremental de auth, cálculo de venta, normalización URL y WebSocket; tokens y auth separados del CSS principal. Vanilla JS preservado, sin framework/bundler.
+- Comandos: sintaxis de todos los módulos y 31 unit tests.
+- Resultado: módulos UMD/CommonJS testeables; renderer activo de cotizaciones solo usa resumen/lazy detail.
+- Riesgo/rollback: `app.js` aún contiene dominios históricos/import/share para no hacer una reescritura masiva; próximos cortes pueden ser mecánicos con la suite actual.
+- Pendiente siguiente: handlers/CSP.
+
+- ID: F8-02 / CSP y assets
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `public/index.html`, `login.html`, `manifest.json`, `icons/dayzo.svg`, `package.json`, lockfile.
+- Evidencia: cero handlers o scripts inline; `script-src 'self'`, `script-src-attr 'none'`; cero CDN/fuentes remotas; Chart.js/Font Awesome fijados y servidos desde allowlist local; icono SVG local.
+- Comandos: tests estáticos HTML/CDN, integración de headers y assets, `npm audit`.
+- Resultado: audit 0 vulnerabilidades; login 100/100/100/100; app buenas prácticas sin dependencias CDN. `style-src-attr 'unsafe-inline'` queda como etapa explícita porque el renderer legacy usa CSSOM/atributos de estado; scripts ya no admiten inline.
+- Costo/licencia: documentado en ADR-007; sin `require()` runtime ni heap adicional.
+- Riesgo/rollback: assets dependen de `npm ci --omit=dev`, donde ambos están en dependencies.
+- Pendiente siguiente: WS/a11y.
+
+- ID: F8-03 / WebSocket y accesibilidad
+- Estado: [x] COMPLETADO
+- Archivos: `public/js/rates-socket.js`, `src/server.js`, `public/index.html`, `public/styles.css`, tests.
+- Evidencia: backoff+jitter, heartbeat cliente, cola máxima 10; ping/pong servidor, payload 16 KB y sin deflate. Zoom móvil habilitado, contraste corregido, targets y reduced motion.
+- Comandos: unit de cola, 3 E2E, captura/Lighthouse phase8.
+- Resultado: Lighthouse app 82 performance, 100 accesibilidad, 96 buenas prácticas, 100 SEO; baseline 74/91/100/100. Login 100 en las cuatro categorías. Cero overflow.
+- Riesgo/rollback: el heartbeat cliente cierra tras 90 s sin frames y reconecta; el servidor conserva último snapshot.
+- Pendiente siguiente: gate.
+
+- ID: F8-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos: frontend modular, servidor CSP/assets/WS, tests, capturas `artifacts/phase8`, ADR/tracker.
+- Resumen git diff: handlers retirados, dependencias self-hosted, CSP de scripts estricta, tokens/auth CSS, WS resiliente.
+- Comandos exactos: `npm run check`; `npm run test:e2e`; `npm audit --audit-level=moderate`; `CAPTURE_LABEL=phase8 node scripts/capture-baseline.js`.
+- Resultado: 31 unit + 3 integration + 3 E2E verdes; audit 0; 82 MB RSS; DOM 1,280 vs 2,341 baseline.
+- Prueba manual: 1440/390/360, teclado/zoom/foco, chart e iconos locales, cero overflow.
+- Riesgo/rollback: rollback al commit F7 restaura CDN/handlers y CSP débil; solo usar como rollback total de emergencia.
+- Siguiente tarea exacta: Fase 9, scripts operativos de backup/preflight/deploy, health interno y runbook VPS.

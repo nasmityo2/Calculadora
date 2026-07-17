@@ -168,6 +168,15 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   schemaDb.close();
   assert.ok(quoteForeignKeys.some((fk) => fk.table === 'users' && fk.on_delete === 'RESTRICT'));
 
+  const appDocument = await fetch(`${server.baseUrl}/calculadoraa`);
+  const csp = appDocument.headers.get('content-security-policy') || '';
+  assert.match(csp, /script-src 'self'/);
+  assert.match(csp, /script-src-attr 'none'/);
+  assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
+  assert.doesNotMatch(csp, /cdn\.jsdelivr|cdnjs\.cloudflare|fonts\.googleapis/);
+  assert.equal((await fetch(`${server.baseUrl}/vendor/chart.js`)).status, 200);
+  assert.equal((await fetch(`${server.baseUrl}/vendor/fontawesome/css/all.min.css`)).status, 200);
+
   const anonymous = new SessionClient(server.baseUrl);
   let result = await anonymous.request('/api/tasas-venezuela?limit=1');
   assert.equal(result.response.status, 200);

@@ -6,7 +6,7 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "build:css": "tailwindcss -i ./styles/tailwind-entry.css -o ./public/tailwind.css --minify",
-    "check:js": "node --check src/server.js && node --check src/validators.js && node --check src/sqlite-session-store.js && node --check src/domain/import-calculation.js && node --check src/rates/rate-sources.js && node --check scripts/admin-reset.js && node --check scripts/start-e2e-server.js && node --check playwright.config.cjs && node --check public/js/auth.js && node --check public/js/sale-calculations.js && node --check public/app.js",
+    "check:js": "node --check src/server.js && node --check src/validators.js && node --check src/sqlite-session-store.js && node --check src/domain/import-calculation.js && node --check src/rates/rate-sources.js && node --check scripts/admin-reset.js && node --check scripts/start-e2e-server.js && node --check playwright.config.cjs && node --check public/js/auth.js && node --check public/js/rates-socket.js && node --check public/js/sale-calculations.js && node --check public/js/url-utils.js && node --check public/app.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --test \"test/integration/**/*.test.js\"",
     "test:e2e": "playwright test",
@@ -24,9 +24,11 @@
     "tailwindcss": "^3.4.17"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.3.1",
     "axios": "^1.18.1",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.10.0",
+    "chart.js": "^4.5.1",
     "compression": "^1.8.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",

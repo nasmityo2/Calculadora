@@ -251,12 +251,12 @@ function updateAuthUI() {
     if (el) {
         if (currentUser) {
             el.innerHTML = `<span class="c-topbar__username">${escapeHtml(userDisplayLabel(currentUser))}</span>
-      <button onclick="doLogout()" class="c-topbar__logout" aria-label="Cerrar sesión">
+      <button type="button" data-app-action="logout" class="c-topbar__logout" aria-label="Cerrar sesión">
         <i class="fas fa-sign-out-alt"></i>
       </button>`;
             el.style.display = 'flex';
         } else {
-            el.innerHTML = `<a href="/login" class="c-topbar__login-btn" aria-label="Iniciar sesión">
+            el.innerHTML = `<a href="/login" class="c-topbar__login-btn" aria-label="Ingresar">
         <i class="fas fa-sign-in-alt"></i> Ingresar
       </a>`;
             el.style.display = 'flex';
@@ -409,7 +409,7 @@ function renderHistorial() {
     if (remaining > 0) {
         moreHTML = ('IntersectionObserver' in window)
             ? `<div id="hist-sentinel" class="c-hist-sentinel"><i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i> Cargando ${remaining} registros más…</div>`
-            : `<div class="c-load-more-wrap"><button type="button" onclick="cargarMasHistorial()" class="c-load-more"><i class="fas fa-history" aria-hidden="true"></i> ${remaining} registros más</button></div>`;
+            : `<div class="c-load-more-wrap"><button type="button" data-app-action="history-more" class="c-load-more"><i class="fas fa-history" aria-hidden="true"></i> ${remaining} registros más</button></div>`;
     }
 
     hDiv.innerHTML = '<div class="c-hist-rows">' + listHTML + '</div>' + moreHTML;
@@ -771,7 +771,7 @@ function clearInput() {
 function copyToClipboard(id) {
     const t = document.getElementById(id).innerText;
     navigator.clipboard.writeText(t).then(() => {
-        const b = document.querySelector(`button[onclick="copyToClipboard('${id}')"] i`);
+        const b = document.querySelector(`button[data-copy-target="${CSS.escape(id)}"] i`);
         if (b) { b.className = 'fas fa-check text-emerald-400'; setTimeout(() => b.className = 'far fa-copy text-xs', 1200); }
         showToast('Copiado: ' + t, 'success', 1500);
     }).catch(() => showToast('No se pudo copiar', 'error', 1800));
@@ -914,7 +914,7 @@ function renderHistBanner() {
           <strong>Tasas del ${escapeHtml(fechaTxt)} ${escapeHtml(horaTxt)}</strong>
           <span class="c-hist-banner__rates">BCV ${moneyFmt.format(t.bcv || 0)} · P2P ${moneyFmt.format(t.binance || 0)}</span>
         </span>
-        <button type="button" class="c-hist-banner__close" onclick="quitarTasaHistorica()">
+        <button type="button" class="c-hist-banner__close" data-app-action="clear-historical-rate">
           <i class="fas fa-times" aria-hidden="true"></i> Volver a hoy
         </button>
       </div>
@@ -1168,32 +1168,36 @@ function updateUI(j) {
 // ═══════════════════════════════════════════════
 // WEBSOCKET
 // ═══════════════════════════════════════════════
+let ratesSocketClient = null;
 function connectWS() {
-    try {
-        const prot = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws   = new WebSocket(`${prot}//${location.host}/tasas-ws`);
-
-        ws.onmessage = (e) => {
+    if (ratesSocketClient || !window.DayzoRatesSocket?.RatesSocket) return;
+    ratesSocketClient = new window.DayzoRatesSocket.RatesSocket({
+        urlFactory: () => {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${protocol}//${location.host}/tasas-ws`;
+        },
+        onMessage: (raw) => {
             try {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'tasas_update') {
-                    d = normalizeRatesContract(msg.data.tasas);
-                    const dbs = d.binance - d.bcv;
-                    const dp  = d.bcv > 0 ? (dbs / d.bcv) * 100 : 0;
-                    updateUI({ ...msg.data, diff_bs: dbs, diff_pct: dp });
-                    calc();
-                    updateChartRealTime(msg.data);
-                    resetHorizontalScroll();
-
-                    // FIX: do NOT reset historialVisible on WS update
-                    // historialData gets a new entry only from periodic refresh
-                }
-            } catch { /* ignore parse errors */ }
-        };
-
-        ws.onclose  = () => setTimeout(connectWS, 5000);
-        ws.onerror  = () => {};
-    } catch (e) { setTimeout(connectWS, 8000); }
+                const msg = JSON.parse(raw);
+                if (msg.type !== 'tasas_update') return;
+                d = normalizeRatesContract(msg.data.tasas);
+                const difference = d.binance - d.bcv;
+                const differencePct = d.bcv > 0 ? (difference / d.bcv) * 100 : 0;
+                updateUI({ ...msg.data, diff_bs: difference, diff_pct: differencePct });
+                calc();
+                updateChartRealTime(msg.data);
+            } catch (_) {
+                // Un frame inválido se descarta sin afectar el último snapshot válido.
+            }
+        },
+        onStatus: (status) => {
+            const element = document.getElementById('current-rates-time');
+            if (element && (status === 'stale' || status === 'error')) {
+                element.classList.add('text-amber-400');
+            }
+        },
+    });
+    ratesSocketClient.connect();
 }
 
 // ═══════════════════════════════════════════════
@@ -1924,21 +1928,7 @@ function extractNombreBase(fullName) {
 }
 
 function normalizeProductoLink(raw) {
-    const s = (raw ?? '').toString().trim();
-    if (!s) return null;
-    let url = s;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
-        if (!/^https?:\/\//i.test(url)) return null;
-    } else {
-        url = `https://${url}`;
-    }
-    try {
-        const u = new URL(url);
-        if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-        return u.href;
-    } catch (_) {
-        return null;
-    }
+    return window.DayzoUrlUtils?.normalizeHttpUrl(raw) || null;
 }
 
 function applyProductoLinkToQuote(quote, link) {
@@ -2285,7 +2275,7 @@ function buildImportQuoteCardHTMLLegacy(item) {
           <div class="c-quote-card__head"><div class="c-quote-card__titlewrap"><h4 class="c-quote-card__name">${name}</h4></div></div>
           <p class="c-import-quote-msg">Sin datos para esta cotización.</p>
           <div class="c-quote-card__actions">
-            <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" onclick='eliminarCotizacionImport(${idJson})'><i class="fas fa-trash"></i> Eliminar</button>
+            <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-legacy-action="delete"><i class="fas fa-trash"></i> Eliminar</button>
           </div>
         </div>`;
     }
@@ -2387,9 +2377,9 @@ function buildImportQuoteCardHTMLLegacy(item) {
       ${planBlock}
 
       <div class="c-quote-card__actions">
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--edit c-auth-only" onclick='abrirPanelEdicionCotizacionImport(${idJson})'><i class="fas fa-pen"></i> Editar</button>
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--img" onclick='exportQuoteImage(${idJson})'><i class="fas fa-image"></i> Imagen</button>
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" onclick='eliminarCotizacionImport(${idJson})'><i class="fas fa-trash"></i> Eliminar</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--edit c-auth-only" data-legacy-action="edit"><i class="fas fa-pen"></i> Editar</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--img" data-legacy-action="image"><i class="fas fa-image"></i> Imagen</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-legacy-action="delete"><i class="fas fa-trash"></i> Eliminar</button>
       </div>
     </div>`;
 }
@@ -2633,6 +2623,76 @@ function cancelarSimulacionGuardada() {
     showToast('Simulación cerrada sin guardar cambios', 'info');
 }
 
+function setupStaticInteractions() {
+    if (document.body.dataset.staticInteractions === '1') return;
+    document.body.dataset.staticInteractions = '1';
+    const bind = (id, event, handler) => document.getElementById(id)?.addEventListener(event, handler);
+
+    bind('btn-refresh', 'click', refreshManual);
+    bind('nav-divisas', 'click', () => switchView('divisas'));
+    bind('nav-import', 'click', () => switchView('import'));
+    ['VES', 'USDT', 'BCV', 'CNY'].forEach((mode) => bind(`b-${mode}`, 'click', () => setM(mode)));
+    bind('hist-toggle-btn', 'click', toggleHistPanel);
+    bind('hist-apply-btn', 'click', aplicarTasaHistorica);
+    bind('monto', 'input', calc);
+    bind('btn-clear-amount', 'click', clearInput);
+    document.querySelectorAll('[data-copy-target]').forEach((button) => {
+        button.addEventListener('click', () => copyToClipboard(button.dataset.copyTarget));
+    });
+    bind('btn-share-rates', 'click', shareRatesImage);
+    document.querySelectorAll('[data-chart-range]').forEach((button) => {
+        button.addEventListener('click', () => setChartRange(button.dataset.chartRange));
+    });
+    document.querySelectorAll('[data-chart-dataset]').forEach((button) => {
+        button.addEventListener('click', () => toggleDataset(Number(button.dataset.chartDataset)));
+    });
+    bind('filter-date', 'change', searchHistoryByDate);
+    bind('filter-time', 'change', renderHistorial);
+
+    [[770, 'btn-emp-770'], [865, 'btn-emp-865'], [1030, 'btn-emp-1030']].forEach(([rate, id]) => {
+        bind(id, 'click', () => setEmpresa(rate));
+    });
+    const customCompany = document.getElementById('btn-emp-custom');
+    customCompany?.addEventListener('click', (event) => {
+        if (event.target.closest('input')) return;
+        setEmpresa('custom');
+    });
+    customCompany?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setEmpresa('custom');
+        }
+    });
+    bind('custom-rate', 'input', (event) => {
+        event.stopPropagation();
+        updateCustomRate(event.target.value);
+    });
+    bind('btn-imp-mode-guided', 'click', () => setImportInputMode('guided'));
+    bind('btn-imp-mode-quick', 'click', () => setImportInputMode('quick'));
+    ['g-largo', 'g-ancho', 'g-alto', 'g-peso', 'g-unid', 'g-precio', 'g-envio', 'g-cajas']
+        .forEach((id) => bind(id, 'input', onGuidedImportInput));
+    bind('imp-data', 'input', onQuickImportInput);
+    bind('imp-fee-plat-input', 'input', onEditarComisionesImport);
+    bind('imp-fee-banco-input', 'input', onEditarComisionesImport);
+    bind('btn-save-import-quote', 'click', guardarCotizacionImport);
+    bind('btn-close-import-detail', 'click', cerrarDetalleCotizacionImport);
+    bind('import-btn-edit', 'click', editarCotizacionImport);
+    bind('import-btn-delete', 'click', () => eliminarCotizacionImport());
+    bind('import-quote-edit-sale-price', 'input', onEmpresaEdicionChange);
+    bind('import-quote-edit-company', 'change', onEmpresaEdicionChange);
+    bind('import-quote-edit-custom-rate', 'input', onEmpresaEdicionChange);
+    bind('btn-update-import-quote', 'click', actualizarCotizacionImport);
+    bind('btn-cancel-import-edit', 'click', cancelarEdicionCotizacionImport);
+
+    document.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-app-action]');
+        if (!target) return;
+        if (target.dataset.appAction === 'logout') doLogout();
+        else if (target.dataset.appAction === 'history-more') cargarMasHistorial();
+        else if (target.dataset.appAction === 'clear-historical-rate') quitarTasaHistorica();
+    });
+}
+
 function setupSaleSimulatorInteractions() {
     document.querySelectorAll('[data-sim-source]').forEach((button) => {
         button.addEventListener('click', () => setSimSource(button.dataset.simSource));
@@ -2643,6 +2703,17 @@ function setupSaleSimulatorInteractions() {
     });
     document.getElementById('sim-save-plan')?.addEventListener('click', guardarPlanSimulacion);
     document.getElementById('sim-cancel-saved')?.addEventListener('click', cancelarSimulacionGuardada);
+    document.querySelectorAll('[data-sim-type]').forEach((button) => {
+        button.addEventListener('click', () => setSimType(button.dataset.simType));
+    });
+    document.querySelectorAll('[data-sim-mode]').forEach((button) => {
+        button.addEventListener('click', () => setSimMode(button.dataset.simMode));
+    });
+    document.querySelectorAll('.c-sim-chip[data-margin]').forEach((button) => {
+        button.addEventListener('click', () => aplicarMargenRapido(Number(button.dataset.margin)));
+    });
+    document.getElementById('sim-costo-manual')?.addEventListener('input', calcGanancia);
+    document.getElementById('sim-input')?.addEventListener('input', onSimInputManual);
 }
 
 function setupImportQuoteInteractions() {
@@ -3301,6 +3372,7 @@ async function shareRatesImage() {
     window.addEventListener('resize', resetHorizontalScroll, { passive: true });
     window.addEventListener('orientationchange', () => setTimeout(resetHorizontalScroll, 150), { passive: true });
 
+    setupStaticInteractions();
     await checkAuth();
     try { await refresh(); } catch (e) { console.error('Init refresh:', e); }
     try { await loadStats(); } catch (e) { console.error('Init stats:', e); }

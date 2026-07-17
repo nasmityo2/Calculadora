@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-07-17T09:17:00.605Z",
+  "baseCommit": "cfc57c1747d4552623de1e6ace0fc2e746e20f06",
+  "seededQuoteCount": 20,
+  "importQuotesPayloadBytes": 10285,
+  "viewports": {
+    "desktop1440": {
+      "domNodes": 1280,
+      "quoteCards": 20,
+      "scrollWidth": 1440,
+      "clientWidth": 1440
+    },
+    "mobile390": {
+      "domNodes": 1280,
+      "quoteCards": 20,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "mobile360": {
+      "domNodes": 1280,
+      "quoteCards": 20,
+      "scrollWidth": 360,
+      "clientWidth": 360
+    }
+  },
+  "lighthouseScores": {
+    "login": {
+      "performance": 100,
+      "accessibility": 100,
+      "best-practices": 100,
+      "seo": 100
+    },
+    "app": {
+      "performance": 82,
+      "accessibility": 100,
+      "best-practices": 96,
+      "seo": 100
+    }
+  },
+  "processMemoryMb": {
+    "rss": 82,
+    "heapUsed": 20,
+    "heapTotal": 32,
+    "external": 5
+  },
+  "staticBytes": {
+    "public/index.html": 47804,
+    "public/app.js": 158403,
+    "public/styles.css": 93458,
+    "public/login.html": 9155,
+    "public/tailwind.css": 3967
+  },
+  "serverErrors": "[2026-07-17T09:16:28.188Z] ERROR updateOficiales fallido: UNABLE_TO_VERIFY_LEAF_SIGNATURE"
+}

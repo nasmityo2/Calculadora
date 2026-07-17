@@ -2,26 +2,23 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Calc Pro</title>
   <meta name="description" content="Tasas Binance, BCV y CNY en vivo, calculadora y costos de importación.">
-  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/2534/2534204.png" type="image/png">
-  <link rel="preload" href="/styles.css?v=20260702" as="style">
+  <link rel="icon" href="/icons/dayzo.svg" type="image/svg+xml">
+  <link rel="preload" href="/styles.css?v=20260717" as="style">
   <link rel="preload" href="/app.js" as="script">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0B0E11">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2534/2534204.png">
+  <link rel="apple-touch-icon" href="/icons/dayzo.svg">
   <link rel="stylesheet" href="/tailwind.css">
-  <link rel="stylesheet" href="/styles.css?v=20260702">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/styles.css?v=20260717">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/vendor/chart.js"></script>
 </head>
 <body>
   <div id="app-root" class="c-app-root">
@@ -43,12 +40,12 @@
     <div class="c-topbar__actions">
       <div id="topbar-user" class="c-topbar__user"></div>
       <span id="current-rates-time" class="c-topbar__time">--:--</span>
-      <button id="btn-refresh" onclick="refreshManual()" class="c-topbar__refresh" aria-label="Actualizar">
+      <button id="btn-refresh" class="c-topbar__refresh" aria-label="Actualizar">
         <i class="fas fa-sync-alt"></i>
       </button>
       <nav class="c-topbar__nav">
-        <button id="nav-divisas" onclick="switchView('divisas')" class="c-nav-tab tab-active">Divisas</button>
-        <button id="nav-import"  onclick="switchView('import')"  class="c-nav-tab text-slate-400">Importación</button>
+        <button id="nav-divisas" class="c-nav-tab tab-active">Divisas</button>
+        <button id="nav-import" class="c-nav-tab text-slate-400">Importación</button>
       </nav>
     </div>
   </header>
@@ -130,14 +127,14 @@
           <section class="c-calc-card" aria-label="Calculadora">
             <!-- Tabs modo -->
             <div class="c-calc-tabs" role="tablist">
-              <button id="b-VES"  onclick="setM('VES')"  role="tab" class="c-calc-tab tab-active">VES</button>
-              <button id="b-USDT" onclick="setM('USDT')" role="tab" class="c-calc-tab text-slate-400">USDT</button>
-              <button id="b-BCV"  onclick="setM('BCV')"  role="tab" class="c-calc-tab text-slate-400">BCV</button>
-              <button id="b-CNY"  onclick="setM('CNY')"  role="tab" class="c-calc-tab text-slate-400">CNY</button>
+              <button id="b-VES" role="tab" class="c-calc-tab tab-active">VES</button>
+              <button id="b-USDT" role="tab" class="c-calc-tab text-slate-400">USDT</button>
+              <button id="b-BCV" role="tab" class="c-calc-tab text-slate-400">BCV</button>
+              <button id="b-CNY" role="tab" class="c-calc-tab text-slate-400">CNY</button>
             </div>
             <!-- Tasas históricas: calcular con las tasas guardadas de otra fecha -->
             <div class="c-hist-bar">
-              <button type="button" id="hist-toggle-btn" class="c-hist-toggle" onclick="toggleHistPanel()" aria-expanded="false" aria-controls="hist-controls">
+              <button type="button" id="hist-toggle-btn" class="c-hist-toggle" aria-expanded="false" aria-controls="hist-controls">
                 <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
                 <span>Calcular con tasa de otra fecha</span>
                 <i class="fas fa-chevron-down c-hist-toggle__chev" aria-hidden="true"></i>
@@ -145,7 +142,7 @@
               <div id="hist-controls" class="c-hist-controls" hidden>
                 <input type="date" id="hist-date" class="c-hist-input" aria-label="Fecha de la tasa histórica">
                 <input type="time" id="hist-time" class="c-hist-input" aria-label="Hora (opcional)" title="Hora (opcional) — sin hora se usa el cierre del día">
-                <button type="button" id="hist-apply-btn" class="c-hist-apply" onclick="aplicarTasaHistorica()">
+                <button type="button" id="hist-apply-btn" class="c-hist-apply">
                   <i class="fas fa-magnifying-glass" aria-hidden="true"></i> Aplicar
                 </button>
               </div>
@@ -156,9 +153,9 @@
               <label id="l-input" class="c-calc-label" for="monto">Monto en Bolívares</label>
               <div class="c-calc-field">
                 <input type="text" inputmode="decimal" id="monto" class="c-calc-field__input"
-                  placeholder="Ej: 1.234.567,89" oninput="calc()" autocomplete="off" spellcheck="false">
+                  placeholder="Ej: 1.234.567,89" autocomplete="off" spellcheck="false">
                 <span id="s-input" class="c-calc-field__suffix">Bs</span>
-                <button onclick="clearInput()" class="c-calc-field__clear" aria-label="Borrar">
+                <button id="btn-clear-amount" class="c-calc-field__clear" aria-label="Borrar">
                   <i class="fas fa-times"></i>
                 </button>
               </div>
@@ -172,7 +169,7 @@
                 </div>
                 <div class="c-result-row__right">
                   <p id="res1-v" class="c-result-row__value">0,00</p>
-                  <button onclick="copyToClipboard('res1-v')" class="c-copy-btn" aria-label="Copiar">
+                  <button data-copy-target="res1-v" class="c-copy-btn" aria-label="Copiar">
                     <i class="far fa-copy"></i>
                   </button>
                 </div>
@@ -184,7 +181,7 @@
                 </div>
                 <div class="c-result-row__right">
                   <p id="res2-v" class="c-result-row__value">0,00</p>
-                  <button onclick="copyToClipboard('res2-v')" class="c-copy-btn" aria-label="Copiar">
+                  <button data-copy-target="res2-v" class="c-copy-btn" aria-label="Copiar">
                     <i class="far fa-copy"></i>
                   </button>
                 </div>
@@ -196,7 +193,7 @@
                 </div>
                 <div class="c-result-row__right">
                   <p id="res3-v" class="c-result-row__value">0,00</p>
-                  <button onclick="copyToClipboard('res3-v')" class="c-copy-btn" aria-label="Copiar">
+                  <button data-copy-target="res3-v" class="c-copy-btn" aria-label="Copiar">
                     <i class="far fa-copy"></i>
                   </button>
                 </div>
@@ -210,7 +207,7 @@
             <p id="b-pct" class="c-brecha__value">0,00%</p>
           </div>
 
-          <button type="button" id="btn-share-rates" class="c-share-btn c-stagger-3" onclick="shareRatesImage()">
+          <button type="button" id="btn-share-rates" class="c-share-btn c-stagger-3">
             <i class="fas fa-share-nodes"></i> Compartir tasas
           </button>
         </div>
@@ -222,11 +219,11 @@
             <header class="c-chart-card__head">
               <h2 id="chart-heading" class="c-chart-card__title">Tendencia</h2>
               <div class="c-chart-ranges">
-                <button id="cf-24h" onclick="setChartRange('24h')" class="chart-filter c-range-btn text-white bg-white/15">24H</button>
-                <button id="cf-7d"  onclick="setChartRange('7d')"  class="chart-filter c-range-btn text-slate-400">7D</button>
-                <button type="button" onclick="setChartRange('month')" id="cf-month"
+                <button id="cf-24h" data-chart-range="24h" class="chart-filter c-range-btn text-white bg-white/15">24H</button>
+                <button id="cf-7d" data-chart-range="7d" class="chart-filter c-range-btn text-slate-400">7D</button>
+                <button type="button" data-chart-range="month" id="cf-month"
                   class="chart-filter c-range-btn text-slate-400">MES</button>
-                <button id="cf-all" onclick="setChartRange('all')" class="chart-filter c-range-btn text-slate-400">TODO</button>
+                <button id="cf-all" data-chart-range="all" class="chart-filter c-range-btn text-slate-400">TODO</button>
               </div>
             </header>
             <div class="c-chart-stats">
@@ -238,13 +235,13 @@
               <canvas id="mainChart"></canvas>
             </div>
             <div class="c-chart-legend">
-              <button onclick="toggleDataset(0)" id="legend-binance" class="c-legend-btn c-legend-btn--green">
+              <button data-chart-dataset="0" id="legend-binance" class="c-legend-btn c-legend-btn--green">
                 <span class="c-legend-dot"></span> Comprar
               </button>
-              <button onclick="toggleDataset(1)" id="legend-compra" class="c-legend-btn c-legend-btn--red">
+              <button data-chart-dataset="1" id="legend-compra" class="c-legend-btn c-legend-btn--red">
                 <span class="c-legend-dot"></span> Vender
               </button>
-              <button onclick="toggleDataset(2)" id="legend-bcv" class="c-legend-btn c-legend-btn--blue">
+              <button data-chart-dataset="2" id="legend-bcv" class="c-legend-btn c-legend-btn--blue">
                 <span class="c-legend-dot"></span> BCV
               </button>
             </div>
@@ -257,8 +254,8 @@
               <span id="last-update" class="c-historial-card__time">--:--</span>
             </header>
             <div class="c-historial-card__filters">
-              <input type="date" id="filter-date" class="c-filter-input" onchange="searchHistoryByDate()" aria-label="Filtrar por fecha">
-              <input type="time" id="filter-time" class="c-filter-input" onchange="renderHistorial()" aria-label="Filtrar por hora">
+              <input type="date" id="filter-date" class="c-filter-input" aria-label="Filtrar por fecha">
+              <input type="time" id="filter-time" class="c-filter-input" aria-label="Filtrar por hora">
             </div>
             <div id="h-lista" class="c-historial-card__list"></div>
           </section>
@@ -279,26 +276,24 @@
             <div class="c-empresas-section">
               <p class="c-field-label">Empresa de envío</p>
               <div class="c-empresas-grid">
-                <button id="btn-emp-770"  onclick="setEmpresa(770)"      class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
+                <button id="btn-emp-770" class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
                   <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide">GCCARGO</span>
                   <span class="c-empresa-btn__price block text-sm text-emerald-400 font-bold mt-0.5">$770</span>
                 </button>
-                <button id="btn-emp-865"  onclick="setEmpresa(865)"      class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
+                <button id="btn-emp-865" class="empresa-btn c-empresa-btn px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800">
                   <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide">Orinoco</span>
                   <span class="c-empresa-btn__price block text-sm text-emerald-400 font-bold mt-0.5">$865</span>
                 </button>
-                <button id="btn-emp-1030" onclick="setEmpresa(1030)"     class="empresa-btn c-empresa-btn px-2 py-3 bg-indigo-600 border border-indigo-400 rounded-xl">
+                <button id="btn-emp-1030" class="empresa-btn c-empresa-btn px-2 py-3 bg-indigo-600 border border-indigo-400 rounded-xl">
                   <span class="c-empresa-btn__name block text-xs font-bold text-white uppercase tracking-wide">import2ven</span>
                   <span class="c-empresa-btn__price block text-sm text-indigo-100 font-bold mt-0.5">$1030</span>
                 </button>
-                <div  id="btn-emp-custom" onclick="setEmpresa('custom')" class="empresa-btn c-empresa-btn c-empresa-btn--custom px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 flex flex-col items-center justify-center" role="button" tabindex="0">
+                <div id="btn-emp-custom" class="empresa-btn c-empresa-btn c-empresa-btn--custom px-2 py-3 bg-slate-900/40 border border-slate-700/50 rounded-xl hover:bg-slate-800 flex flex-col items-center justify-center" role="button" tabindex="0">
                   <span class="c-empresa-btn__name block text-xs font-bold text-slate-300 uppercase tracking-wide mb-1">Personalizado</span>
                   <div class="flex items-center gap-1">
                     <span id="custom-rate-prefix" class="text-emerald-400 font-bold text-sm">$</span>
                     <input type="number" id="custom-rate" inputmode="decimal" placeholder="0"
-                      class="w-16 bg-transparent border-b border-slate-600 text-center text-emerald-400 font-bold text-sm focus:outline-none focus:border-emerald-400"
-                      oninput="updateCustomRate(this.value); event.stopPropagation();"
-                      onclick="event.stopPropagation()">
+                      class="w-16 bg-transparent border-b border-slate-600 text-center text-emerald-400 font-bold text-sm focus:outline-none focus:border-emerald-400">
                   </div>
                 </div>
               </div>
@@ -315,40 +310,40 @@
             <!-- Entrada (modo guiado / rápido) -->
             <div class="c-import-input-section">
               <div class="c-import-mode-toggle" role="tablist" aria-label="Modo de entrada">
-                <button type="button" id="btn-imp-mode-guided" class="c-imp-mode-btn is-active" onclick="setImportInputMode('guided')" role="tab"><i class="fas fa-list-check"></i> Guiado</button>
-                <button type="button" id="btn-imp-mode-quick"  class="c-imp-mode-btn"           onclick="setImportInputMode('quick')"  role="tab"><i class="fas fa-bolt"></i> Rápido</button>
+                <button type="button" id="btn-imp-mode-guided" class="c-imp-mode-btn is-active" role="tab"><i class="fas fa-list-check"></i> Guiado</button>
+                <button type="button" id="btn-imp-mode-quick" class="c-imp-mode-btn" role="tab"><i class="fas fa-bolt"></i> Rápido</button>
               </div>
 
               <!-- Modo guiado: campos separados -->
               <div id="imp-guided" class="c-imp-guided">
                 <label class="c-field-label">Dimensiones (cm)</label>
                 <div class="c-imp-dims">
-                  <input type="number" inputmode="decimal" id="g-largo" class="c-imp-gfield" placeholder="Largo" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  <input type="number" inputmode="decimal" id="g-largo" class="c-imp-gfield" placeholder="Largo" min="0" step="any" autocomplete="off">
                   <span class="c-imp-dims-x" aria-hidden="true">×</span>
-                  <input type="number" inputmode="decimal" id="g-ancho" class="c-imp-gfield" placeholder="Ancho" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  <input type="number" inputmode="decimal" id="g-ancho" class="c-imp-gfield" placeholder="Ancho" min="0" step="any" autocomplete="off">
                   <span class="c-imp-dims-x" aria-hidden="true">×</span>
-                  <input type="number" inputmode="decimal" id="g-alto" class="c-imp-gfield" placeholder="Alto" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                  <input type="number" inputmode="decimal" id="g-alto" class="c-imp-gfield" placeholder="Alto" min="0" step="any" autocomplete="off">
                 </div>
                 <div class="c-imp-gfields-grid">
                   <div class="c-imp-gfield-wrap">
                     <label class="c-field-label" for="g-peso">Peso por caja (kg)</label>
-                    <input type="number" inputmode="decimal" id="g-peso" class="c-imp-gfield" placeholder="0" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                    <input type="number" inputmode="decimal" id="g-peso" class="c-imp-gfield" placeholder="0" min="0" step="any" autocomplete="off">
                   </div>
                   <div class="c-imp-gfield-wrap">
                     <label class="c-field-label" for="g-unid">Unidades por caja</label>
-                    <input type="number" inputmode="numeric" id="g-unid" class="c-imp-gfield" placeholder="0" min="0" step="1" oninput="onGuidedImportInput()" autocomplete="off">
+                    <input type="number" inputmode="numeric" id="g-unid" class="c-imp-gfield" placeholder="0" min="0" step="1" autocomplete="off">
                   </div>
                   <div class="c-imp-gfield-wrap">
                     <label class="c-field-label" for="g-precio">Precio unidad (CNY)</label>
-                    <input type="number" inputmode="decimal" id="g-precio" class="c-imp-gfield" placeholder="0" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                    <input type="number" inputmode="decimal" id="g-precio" class="c-imp-gfield" placeholder="0" min="0" step="any" autocomplete="off">
                   </div>
                   <div class="c-imp-gfield-wrap">
                     <label class="c-field-label" for="g-envio">Envío China (USD/caja)</label>
-                    <input type="number" inputmode="decimal" id="g-envio" class="c-imp-gfield" placeholder="0 (opcional)" min="0" step="any" oninput="onGuidedImportInput()" autocomplete="off">
+                    <input type="number" inputmode="decimal" id="g-envio" class="c-imp-gfield" placeholder="0 (opcional)" min="0" step="any" autocomplete="off">
                   </div>
                   <div class="c-imp-gfield-wrap">
                     <label class="c-field-label" for="g-cajas">Núm. de cajas</label>
-                    <input type="number" inputmode="numeric" id="g-cajas" class="c-imp-gfield" placeholder="1" min="1" step="1" oninput="onGuidedImportInput()" autocomplete="off">
+                    <input type="number" inputmode="numeric" id="g-cajas" class="c-imp-gfield" placeholder="1" min="1" step="1" autocomplete="off">
                   </div>
                 </div>
               </div>
@@ -358,7 +353,7 @@
                 <label class="c-field-label" for="imp-data">Datos de entrada</label>
                 <input type="text" id="imp-data" class="c-import-input"
                   placeholder="Ej: 30x30x30 15 50 4.5"
-                  oninput="onQuickImportInput()" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <p class="c-import-hint">Formato: <strong>LxAxA · Peso · Unidades · Precio CNY</strong> · [Envío] · [Cajas]</p>
               </div>
             </div>
@@ -369,11 +364,11 @@
               <div class="c-fees-grid">
                 <div class="c-fee-item">
                   <span class="c-fee-item__label">Plataforma (%)</span>
-                  <input type="number" id="imp-fee-plat-input" class="c-fee-item__input" step="0.01" min="0" value="3" oninput="onEditarComisionesImport()" inputmode="decimal">
+                  <input type="number" id="imp-fee-plat-input" class="c-fee-item__input" step="0.01" min="0" value="3" inputmode="decimal">
                 </div>
                 <div class="c-fee-item">
                   <span class="c-fee-item__label">Banco (%)</span>
-                  <input type="number" id="imp-fee-banco-input" class="c-fee-item__input" step="0.01" min="0" value="1.25" oninput="onEditarComisionesImport()" inputmode="decimal">
+                  <input type="number" id="imp-fee-banco-input" class="c-fee-item__input" step="0.01" min="0" value="1.25" inputmode="decimal">
                 </div>
               </div>
             </div>
@@ -443,7 +438,7 @@
                 <input type="url" id="import-quote-product-link" class="c-quotes-link-input" placeholder="Link del producto (opcional)" aria-label="Link del producto" inputmode="url" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <input type="number" id="import-quote-sale-price" class="c-quotes-link-input" placeholder="Precio de venta por unidad (opcional, USD)" aria-label="Precio de venta por unidad" inputmode="decimal" min="0" step="any" autocomplete="off">
               </div>
-              <button onclick="guardarCotizacionImport()" class="c-quotes-save-btn c-auth-only" aria-label="Guardar">
+              <button id="btn-save-import-quote" class="c-quotes-save-btn c-auth-only" aria-label="Guardar">
                 <i class="fas fa-save"></i> Guardar
               </button>
             </div>
@@ -460,7 +455,7 @@
                   <div id="import-quote-detail-title" class="c-quote-detail__title">-</div>
                   <div id="import-quote-detail-date" class="c-quote-detail__date">-</div>
                 </div>
-                <button onclick="cerrarDetalleCotizacionImport()" class="c-quote-detail__close" aria-label="Cerrar">
+                <button id="btn-close-import-detail" class="c-quote-detail__close" aria-label="Cerrar">
                   <i class="fas fa-times"></i>
                 </button>
               </div>
@@ -471,18 +466,18 @@
                 <div id="import-row-producto-link" class="c-quote-detail__row c-quote-detail__row--link hidden"><span>Producto</span><strong><a id="import-q-producto-link" href="#" target="_blank" rel="noopener noreferrer" class="c-producto-link">-</a></strong></div>
               </div>
               <div class="c-quote-detail__actions">
-                <button id="import-btn-edit"   onclick="editarCotizacionImport()"   class="c-quote-detail__btn-edit c-auth-only"><i class="fas fa-pen"></i> Editar</button>
-                <button id="import-btn-delete" onclick="eliminarCotizacionImport()" class="c-quote-detail__btn-delete c-auth-only"><i class="fas fa-trash"></i> Eliminar</button>
+                <button id="import-btn-edit" class="c-quote-detail__btn-edit c-auth-only"><i class="fas fa-pen"></i> Editar</button>
+                <button id="import-btn-delete" class="c-quote-detail__btn-delete c-auth-only"><i class="fas fa-trash"></i> Eliminar</button>
               </div>
               <!-- Edit controls -->
               <div id="import-quote-edit-controls" class="c-quote-edit hidden">
                 <p class="c-quote-edit__hint">Cambia empresa para recalcular envío.</p>
                 <input type="text" id="import-quote-edit-name" class="c-quote-edit__name" placeholder="Nombre base">
                 <input type="url" id="import-quote-edit-product-link" class="c-quote-edit__link" placeholder="Link del producto (opcional)" inputmode="url" autocomplete="off" aria-label="Link del producto">
-                <input type="number" id="import-quote-edit-sale-price" class="c-quote-edit__link" placeholder="Precio de venta por unidad (opcional, USD)" inputmode="decimal" min="0" step="any" autocomplete="off" aria-label="Precio de venta por unidad" oninput="onEmpresaEdicionChange()">
+                <input type="number" id="import-quote-edit-sale-price" class="c-quote-edit__link" placeholder="Precio de venta por unidad (opcional, USD)" inputmode="decimal" min="0" step="any" autocomplete="off" aria-label="Precio de venta por unidad">
                 <div class="c-quote-edit__company-row">
                   <label for="import-quote-edit-company" class="c-field-label" style="margin:0">Empresa</label>
-                  <select id="import-quote-edit-company" onchange="onEmpresaEdicionChange()" class="c-quote-edit__select">
+                  <select id="import-quote-edit-company" class="c-quote-edit__select">
                     <option value="770">GCCARGO (770)</option>
                     <option value="865">Orinoco (865)</option>
                     <option value="1030">import2ven (1030)</option>
@@ -495,8 +490,8 @@
                 </div>
                 <p class="c-quote-edit__hint">Entrada: <span id="import-quote-edit-entrada" class="c-quote-edit__entrada">-</span></p>
                 <div class="c-quote-edit__btns">
-                  <button onclick="actualizarCotizacionImport()"       class="c-quote-edit__save c-auth-only">   <i class="fas fa-check"></i> Actualizar</button>
-                  <button onclick="cancelarEdicionCotizacionImport()"  class="c-quote-edit__cancel">Cancelar</button>
+                  <button id="btn-update-import-quote" class="c-quote-edit__save c-auth-only"><i class="fas fa-check"></i> Actualizar</button>
+                  <button id="btn-cancel-import-edit" class="c-quote-edit__cancel">Cancelar</button>
                 </div>
               </div>
               <!-- Desglose detalle -->
@@ -613,7 +608,7 @@
             <!-- Manual input -->
             <div id="sim-manual-input-container" class="c-sim-manual-wrap" style="display:none;">
               <span class="c-sim-manual-prefix" aria-hidden="true">$</span>
-              <input type="number" inputmode="decimal" id="sim-costo-manual" class="c-sim-manual-input" placeholder="Costo base por unidad/caja" oninput="calcGanancia()">
+              <input type="number" inputmode="decimal" id="sim-costo-manual" class="c-sim-manual-input" placeholder="Costo base por unidad/caja">
             </div>
             </section>
 
@@ -622,16 +617,16 @@
             <h4 id="sim-step-sale-title" class="c-sim-step__title"><span>2</span> ¿Cómo venderás?</h4>
             <p class="c-sim-group-label">Vender por</p>
             <div class="c-sim-toggle-group">
-              <button id="btn-sim-unidad" onclick="setSimType('unidad')" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-emerald-600 text-white shadow">Por unidad</button>
-              <button id="btn-sim-caja"   onclick="setSimType('caja')"   type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Por caja</button>
+              <button id="btn-sim-unidad" data-sim-type="unidad" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-emerald-600 text-white shadow">Por unidad</button>
+              <button id="btn-sim-caja" data-sim-type="caja" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Por caja</button>
             </div>
 
             <!-- Modo de cálculo -->
             <p class="c-sim-group-label">Modo de cálculo</p>
             <div class="c-sim-toggle-group">
-              <button id="btn-mode-precio" onclick="setSimMode('precio')" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-indigo-600 text-white shadow">Precio ($)</button>
-              <button id="btn-mode-bs"     onclick="setSimMode('bs')"     type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Precio (Bs.)</button>
-              <button id="btn-mode-pct"    onclick="setSimMode('pct')"    type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">ROI deseado (%)</button>
+              <button id="btn-mode-precio" data-sim-mode="precio" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-indigo-600 text-white shadow">Precio ($)</button>
+              <button id="btn-mode-bs" data-sim-mode="bs" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">Precio (Bs.)</button>
+              <button id="btn-mode-pct" data-sim-mode="pct" type="button" class="c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white">ROI deseado (%)</button>
             </div>
 
             <!-- Costo base en uso -->
@@ -650,19 +645,19 @@
             <div class="c-sim-input-wrap">
               <label class="sr-only" for="sim-input">Valor de simulación</label>
               <span id="sim-input-icon" class="c-sim-input-icon" aria-hidden="true">$</span>
-              <input type="number" inputmode="decimal" id="sim-input" class="c-sim-input" placeholder="Precio venta" oninput="onSimInputManual()">
+              <input type="number" inputmode="decimal" id="sim-input" class="c-sim-input" placeholder="Precio venta">
             </div>
 
             <!-- ROI rápido: aplica rentabilidad sobre el costo base -->
             <div class="c-sim-quick" aria-label="ROI rápido">
               <span class="c-sim-quick__label"><i class="fas fa-bolt" aria-hidden="true"></i> ROI rápido sobre el costo</span>
               <div class="c-sim-quick__chips">
-                <button type="button" class="c-sim-chip" data-margin="20"  onclick="aplicarMargenRapido(20)"><span class="c-sim-chip__main">+20%</span><span class="c-sim-chip__sub">×1.2</span></button>
-                <button type="button" class="c-sim-chip" data-margin="30"  onclick="aplicarMargenRapido(30)"><span class="c-sim-chip__main">+30%</span><span class="c-sim-chip__sub">×1.3</span></button>
-                <button type="button" class="c-sim-chip" data-margin="50"  onclick="aplicarMargenRapido(50)"><span class="c-sim-chip__main">+50%</span><span class="c-sim-chip__sub">×1.5</span></button>
-                <button type="button" class="c-sim-chip" data-margin="80"  onclick="aplicarMargenRapido(80)"><span class="c-sim-chip__main">+80%</span><span class="c-sim-chip__sub">×1.8</span></button>
-                <button type="button" class="c-sim-chip" data-margin="100" onclick="aplicarMargenRapido(100)"><span class="c-sim-chip__main">×2</span><span class="c-sim-chip__sub">+100%</span></button>
-                <button type="button" class="c-sim-chip" data-margin="200" onclick="aplicarMargenRapido(200)"><span class="c-sim-chip__main">×3</span><span class="c-sim-chip__sub">+200%</span></button>
+                <button type="button" class="c-sim-chip" data-margin="20"><span class="c-sim-chip__main">+20%</span><span class="c-sim-chip__sub">×1.2</span></button>
+                <button type="button" class="c-sim-chip" data-margin="30"><span class="c-sim-chip__main">+30%</span><span class="c-sim-chip__sub">×1.3</span></button>
+                <button type="button" class="c-sim-chip" data-margin="50"><span class="c-sim-chip__main">+50%</span><span class="c-sim-chip__sub">×1.5</span></button>
+                <button type="button" class="c-sim-chip" data-margin="80"><span class="c-sim-chip__main">+80%</span><span class="c-sim-chip__sub">×1.8</span></button>
+                <button type="button" class="c-sim-chip" data-margin="100"><span class="c-sim-chip__main">×2</span><span class="c-sim-chip__sub">+100%</span></button>
+                <button type="button" class="c-sim-chip" data-margin="200"><span class="c-sim-chip__main">×3</span><span class="c-sim-chip__sub">+200%</span></button>
               </div>
             </div>
             </section>
@@ -744,7 +739,9 @@
   </main>
   </div>
 
+  <script src="/js/url-utils.js"></script>
   <script src="/js/sale-calculations.js"></script>
+  <script src="/js/rates-socket.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

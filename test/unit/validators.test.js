@@ -2,14 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const {
   PRODUCTO_LINK_MAX_LEN,
   sanitizeProductoLink,
   validatePassword,
   validateUsername,
 } = require('../../src/validators');
+const { normalizeHttpUrl } = require('../../public/js/url-utils');
 
 test('sanitizeProductoLink agrega https a un dominio sin esquema', () => {
   assert.equal(
@@ -19,9 +18,9 @@ test('sanitizeProductoLink agrega https a un dominio sin esquema', () => {
 });
 
 test('el normalizador web no reintroduce llaves en URLs sin esquema', () => {
-  const appSource = fs.readFileSync(path.resolve(__dirname, '..', '..', 'public', 'app.js'), 'utf8');
-  assert.doesNotMatch(appSource, /\{\{https:\/\/\$\{url\}\}\}/);
-  assert.match(appSource, /url = `https:\/\/\$\{url\}`;/);
+  assert.equal(normalizeHttpUrl('ejemplo.com/producto'), 'https://ejemplo.com/producto');
+  assert.equal(normalizeHttpUrl('{{https://ejemplo.com}}'), null);
+  assert.equal(normalizeHttpUrl('javascript://alert(1)'), null);
 });
 
 test('sanitizeProductoLink conserva http y https válidos', () => {

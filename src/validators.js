@@ -70,6 +70,7 @@ function isUUID(s) {
 function sanitizeProductoLink(raw) {
   const s = cleanString(raw, PRODUCTO_LINK_MAX_LEN + 64);
   if (!s) return null;
+  if (/[\u0000-\u001F\u007F{}]/.test(s)) return null;
   let url = s;
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
     if (!/^https?:\/\//i.test(url)) return null;
@@ -79,6 +80,7 @@ function sanitizeProductoLink(raw) {
   try {
     const u = new URL(url);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (!u.hostname || u.username || u.password) return null;
     const href = u.href;
     return href.length > PRODUCTO_LINK_MAX_LEN ? href.slice(0, PRODUCTO_LINK_MAX_LEN) : href;
   } catch (_) {

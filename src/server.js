@@ -74,16 +74,19 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:      ["'self'"],
-      scriptSrc:       ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-      styleSrc:        ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-      fontSrc:         ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-      imgSrc:          ["'self'", "data:", "blob:", "https://cdn-icons-png.flaticon.com"],
-      connectSrc:      ["'self'", "wss:", "ws:", "https://cdn.jsdelivr.net"],
+      scriptSrc:       ["'self'"],
+      scriptSrcAttr:   ["'none'"],
+      styleSrc:        ["'self'"],
+      // Migración intermedia: JS/HTML ya no ejecutan scripts inline; algunos
+      // estados visuales aún usan element.style y se restringen a atributos.
+      styleSrcAttr:    ["'unsafe-inline'"],
+      fontSrc:         ["'self'", "data:"],
+      imgSrc:          ["'self'", "data:", "blob:"],
+      connectSrc:      ["'self'", "wss:", "ws:"],
       workerSrc:       ["'self'"],
       objectSrc:       ["'none'"],
       baseUri:         ["'self'"],
       frameAncestors:  ["'none'"],
-      scriptSrcAttr:   ["'unsafe-inline'"],
     },
   },
   frameguard: { action: 'deny' }, // X-Frame-Options: DENY (anti-clickjacking)
@@ -297,6 +300,16 @@ app.get('/manifest.json', (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(path.join(PUBLIC_DIR, 'manifest.json'));
 });
+
+// Assets de navegador fijados por package-lock; no se expone node_modules completo.
+app.get('/vendor/chart.js', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(path.join(ROOT, 'node_modules', 'chart.js', 'dist', 'chart.umd.js'));
+});
+app.use('/vendor/fontawesome', express.static(
+  path.join(ROOT, 'node_modules', '@fortawesome', 'fontawesome-free'),
+  { maxAge: '365d', immutable: true, etag: true }
+));
 
 // Estáticos con caché agresiva para CSS/imágenes y revalidación para HTML/JS de app.
 app.use(express.static(PUBLIC_DIR, {
@@ -1759,7 +1772,24 @@ app.use((err, req, res, next) => {
 // ─── SECCIÓN: WEBSOCKET ─────────────────────────────────────────────────────
 
 const server   = http.createServer(app);
-const wssTasas = new WebSocket.Server({ noServer: true });
+const wssTasas = new WebSocket.Server({
+  noServer: true,
+  maxPayload: 16 * 1024,
+  perMessageDeflate: false,
+});
+
+wssTasas.on('connection', (socket) => {
+  socket.isAlive = true;
+  socket.on('pong', () => { socket.isAlive = true; });
+});
+const wsHeartbeat = setInterval(() => {
+  wssTasas.clients.forEach((socket) => {
+    if (socket.isAlive === false) return socket.terminate();
+    socket.isAlive = false;
+    socket.ping();
+  });
+}, 30_000);
+wsHeartbeat.unref();
 
 server.on('upgrade', (request, socket, head) => {
   if (request.url.split('?')[0] !== '/tasas-ws') return socket.destroy();
@@ -1866,6 +1896,7 @@ function shutdown(signal, exitCode = 0) {
 
   clearTimeout(timerBinance);
   clearInterval(intervalOficiales);
+  clearInterval(wsHeartbeat);
 
   // Avisar a los clientes WS antes de cerrar, luego terminarlos.
   try {

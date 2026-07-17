@@ -2,69 +2,6 @@
    Calc Pro — Binance Dark Premium (/public/styles.css)
    ═══════════════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@400;500;600&display=swap');
-
-:root {
-  /* Fondos con profundidad */
-  --bg-page:     #0B0E11;
-  --bg-card:     #1E2329;
-  --bg-card-hover: #252B33;
-  --bg-elevated: #2B3139;
-  --bg-input:    #181C20;
-  --bg-dark:     #080A0D;
-
-  /* Texto */
-  --text-ink:    #EAECEF;
-  --text-soft:   #848E9C;
-  --text-ghost:  #474D57;
-
-  /* Acento naranja — el único color vibrante */
-  --accent:      #E8541A;
-  --accent-warm: #C9471A;
-  --accent-pale: rgba(232, 84, 26, 0.10);
-  --accent-glow: rgba(232, 84, 26, 0.25);
-
-  /* Semánticos */
-  --green:       #0ECB81;
-  --green-pale:  rgba(14, 203, 129, 0.10);
-  --red:         #F6465D;
-  --red-pale:    rgba(246, 70, 93, 0.10);
-  --blue:        #3B82F6;
-  --blue-pale:   rgba(59, 130, 246, 0.10);
-  --amber:       #F0B90B;
-  --amber-pale:  rgba(240, 185, 11, 0.10);
-  --purple:      #A78BFA;
-  --purple-pale: rgba(167, 139, 250, 0.10);
-
-  /* Tipografía */
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-mono:    'DM Mono', 'Fira Code', monospace;
-  --font-sans:    'DM Sans', system-ui, sans-serif;
-
-  /* Bordes */
-  --border:        1px solid rgba(255,255,255,0.06);
-  --border-strong: 1px solid rgba(255,255,255,0.10);
-  --border-accent: 1px solid rgba(232,84,26,0.40);
-
-  /* Sombras con color */
-  --shadow-sm:  0 1px 4px rgba(0,0,0,0.4);
-  --shadow-md:  0 4px 16px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.3);
-  --shadow-lg:  0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
-  --shadow-accent: 0 0 20px rgba(232,84,26,0.30), 0 4px 12px rgba(232,84,26,0.15);
-  --shadow-glow:   0 0 40px rgba(232,84,26,0.12);
-
-  /* Transiciones */
-  --t-fast:   0.15s ease;
-  --t-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  --t-slow:   0.4s cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Espaciado y radios — mantener igual */
-  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px;
-  --s6:24px; --s8:32px; --s10:40px; --s12:48px;
-  --r-sm:6px; --r-md:12px; --r-lg:18px; --r-xl:24px;
-  --r-2xl:32px; --r-full:9999px;
-}
-
 *, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -129,7 +66,7 @@ body {
 
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-input[type="number"] { -moz-appearance: textfield; }
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
@@ -2321,7 +2258,7 @@ textarea:focus {
 #b-USDT.tab-active,
 #b-BCV.tab-active,
 #b-CNY.tab-active {
-  background: var(--accent) !important;
+  background: #96340f !important;
   color: #fff !important;
   border-color: transparent !important;
   box-shadow: var(--shadow-accent) !important;
