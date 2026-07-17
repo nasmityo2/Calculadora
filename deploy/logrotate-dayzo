@@ -1,0 +1,11 @@
+/root/.pm2/logs/calculadora-*.log /var/log/nginx/*dayzo*.log {
+    daily
+    rotate 7
+    size 10M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 0640 root adm
+}

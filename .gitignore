@@ -14,6 +14,7 @@ data/historial.db
 data/historial.db-shm
 data/historial.db-wal
 data/backups/
+/backups/
 artifacts/*/data/
 artifacts/*/pm2-data*/
 .tmp/

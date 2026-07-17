@@ -1,0 +1,21 @@
+[Unit]
+Description=DAYZO consistent SQLite backup and restore drill
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=dayzo
+Group=dayzo
+WorkingDirectory=/var/www/calculadora/current
+Environment=DATA_DIR=/var/www/calculadora/shared/data
+Environment=BACKUP_DIR=/var/backups/dayzo/daily
+Environment=BACKUP_RETENTION_DAYS=7
+ExecStart=/usr/bin/npm run backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/dayzo /var/www/calculadora/shared/data

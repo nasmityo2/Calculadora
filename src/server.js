@@ -1316,6 +1316,35 @@ app.get('/calculadoraa', (req, res) => {
 
 // ─── SECCIÓN: HEALTH CHECK ──────────────────────────────────────────────────
 
+function requireLoopback(req, res, next) {
+  const ip = String(req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  if (['127.0.0.1', '::1'].includes(ip)) return next();
+  return res.status(404).end();
+}
+
+app.get('/health-internal', requireLoopback, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  let database = 'ok';
+  try {
+    db.prepare('SELECT 1').get();
+  } catch (_) {
+    database = 'unavailable';
+  }
+  const sources = getRateSourceStatus();
+  const ready = database === 'ok';
+  res.status(ready ? 200 : 503).json({
+    status: ready ? (sources.binance.stale || sources.bcv.stale ? 'degraded' : 'ok') : 'unavailable',
+    ready,
+    uptimeSeconds: Math.floor(process.uptime()),
+    memoryRssMb: Math.round(process.memoryUsage().rss / 1048576),
+    database,
+    sources: {
+      binance: sources.binance.status,
+      bcv: sources.bcv.status,
+    },
+  });
+});
+
 app.get('/health', requireAuth, requireAdmin, (req, res) => {
   const mem = process.memoryUsage();
   res.json({

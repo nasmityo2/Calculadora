@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T09:17:00Z  
+Última actualización: 2026-07-17T09:23:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 9 — VPS 1 GB
+Fase actual: 10 — Cierre web
 
 ## Estados
 
@@ -23,8 +23,8 @@ Fase actual: 9 — VPS 1 GB
 - [x] Fase 6 — Login DAYZO
 - [x] Fase 7 — Tasas y frescura
 - [x] Fase 8 — Modularización/performance/CSP
-- [~] Fase 9 — VPS 1 GB
-- [ ] Fase 10 — Cierre web
+- [x] Fase 9 — VPS 1 GB (preparación local; ejecución VPS bloqueada)
+- [~] Fase 10 — Cierre web
 - [ ] Fase 11 — Mobile, después del gate web
 
 ## Fase 0 — Baseline, respaldo y mapa
@@ -428,3 +428,45 @@ Fase actual: 9 — VPS 1 GB
 - Prueba manual: 1440/390/360, teclado/zoom/foco, chart e iconos locales, cero overflow.
 - Riesgo/rollback: rollback al commit F7 restaura CDN/handlers y CSP débil; solo usar como rollback total de emergencia.
 - Siguiente tarea exacta: Fase 9, scripts operativos de backup/preflight/deploy, health interno y runbook VPS.
+
+## Fase 9 — Operación VPS 1 GB
+
+- ID: F9-01 / memoria y proceso
+- Estado: [x] COMPLETADO
+- Archivos: `ecosystem.config.cjs`, `docs/RUNBOOK-PRODUCCION.md`.
+- Evidencia: una instancia, heap 320 MB, restart 350 MB, loopback. Smoke PM2 production con configuración real: online, 0 reinicios, 76.4 MB RSS tras 7 s.
+- Comandos: `npx pm2 start ecosystem.config.cjs --env production`; `pm2 status`; delete/flush/kill.
+- Resultado: presupuesto inicial muy por debajo de 1 GB; falta observación 24 h real.
+- Riesgo/rollback: límites se ajustan solo con métricas VPS; rollback previo 512 MB aumenta riesgo OOM.
+- Pendiente siguiente: backup/preflight.
+
+- ID: F9-02 / backup y preflight
+- Estado: [x] COMPLETADO
+- Archivos: `scripts/backup-sqlite.js`, `scripts/preflight.js`, package scripts, systemd timer/service.
+- Evidencia: lock anti-solape, API backup, quick_check, restore drill, retención; preflight valida Node, lock, producción, secreto 64+, loopback y SQLite sin imprimir secreto.
+- Comandos: `npm run backup` sobre DB E2E: 241,664 B, quick/restore ok; preflight válido exit 0 y sin secret exit 1.
+- Resultado: backup/restore y fail-closed reproducibles.
+- Riesgo/rollback: retención solo borra archivos con patrón DAYZO en directorio dedicado; off-site se configura externamente.
+- Pendiente siguiente: deploy/infra.
+
+- ID: F9-03 / deploy, rollback, Nginx y host
+- Estado: [x] COMPLETADO
+- Archivos: `deploy/deploy.sh`, `rollback.sh`, `setup-vps.sh`, `nginx-dayzo.conf`, logrotate, timer/service, env example, runbook.
+- Evidencia: release/symlink atómico, backup previo, install production-only, preflight, PM2 como usuario `dayzo`, health loop, rollback automático/de un comando; UFW 22/80/443, swap 1 GB, logrotate, WS/timeouts/body 512 KB, health público bloqueado.
+- Prueba local: integración `/health-internal` loopback 200, XFF remoto 404 y sin PII/cache; PM2 production smoke verde.
+- Riesgo/rollback: scripts Ubuntu no se ejecutan en Windows; revisión final en VPS exige `nginx -t`, systemd y symlink reales.
+- Pendiente siguiente: bloqueo externo.
+
+- ID: F9-EXT / infraestructura real
+- Estado: [!] BLOQUEADO
+- Bloqueo concreto: esta sesión no dispone de SSH/VPS, DNS, Certbot, destino off-site cifrado ni privilegios UFW/systemd.
+- Preparado: comandos exactos en `docs/RUNBOOK-PRODUCCION.md` y `deploy/`.
+- Evidencia requerida para desbloquear: `ss -lntp`, `ufw status verbose`, `nginx -t`, timer backup, restore real, deploy+rollback, RSS/swap 24 h y copia off-site.
+- Riesgo/rollback: no se simuló acceso ni se alteró producción.
+- Siguiente tarea exacta: ejecutar F10 local completo; deploy/observación quedará como único gate web externo.
+
+- ID: F9-GATE / cierre local
+- Estado: [x] COMPLETADO
+- Comandos exactos: backup/restore, preflight success/failure, PM2 production smoke, tests de health.
+- Resultado: controles ejecutables locales verdes; operación remota aislada en F9-EXT.
+- Siguiente tarea exacta: Fase 10, suite completa, auditoría final web y artefacto de deploy.

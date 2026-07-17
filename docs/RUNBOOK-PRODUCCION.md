@@ -14,23 +14,19 @@ No pegar secretos en la shell compartida, Git, logs, tickets ni este documento.
 
 ## Backup consistente y restore drill
 
-Con la aplicación activa, usar la API de backup de SQLite o `.backup`; nunca copiar el archivo WAL en caliente:
+Con la aplicación activa, usar la API de backup de SQLite; nunca copiar el archivo WAL en caliente:
 
 ```bash
-mkdir -p /var/backups/dayzo
-sqlite3 /var/www/calculadora/current/data/historial.db \
-  ".timeout 10000" \
-  ".backup '/var/backups/dayzo/historial-$(date -u +%Y%m%dT%H%M%SZ).db'"
-sqlite3 /var/backups/dayzo/historial-*.db 'PRAGMA quick_check;'
+sudo -u dayzo env \
+  DATA_DIR=/var/www/calculadora/shared/data \
+  BACKUP_DIR=/var/backups/dayzo/daily \
+  BACKUP_RETENTION_DAYS=7 \
+  npm --prefix /var/www/calculadora/current run backup
 ```
 
-Restore drill aislado:
-
-```bash
-install -m 0600 /var/backups/dayzo/historial-AAAA.db /tmp/dayzo-restore.db
-sqlite3 /tmp/dayzo-restore.db 'PRAGMA quick_check; SELECT COUNT(*) FROM tasas;'
-rm -f /tmp/dayzo-restore.db
-```
+El comando crea un backup consistente, ejecuta `quick_check`, restaura a un
+archivo temporal con la misma API, repite `quick_check` y solo entonces aplica
+retención. `deploy/dayzo-backup.timer` lo ejecuta a diario.
 
 Retención inicial: 7 diarios, 4 semanales y 6 mensuales. Cifrar y copiar off-site; comprobar restauración mensualmente. Nunca imprimir filas de usuarios o cotizaciones en el informe.
 
@@ -45,36 +41,23 @@ Estructura:
   current -> releases/<timestamp>
 ```
 
-Pasos:
+El artefacto debe venir de CI con `npm ci`, `npm run check`,
+`npm run test:e2e` y `npm run build:css` ya verdes. En el VPS:
 
 ```bash
-set -euo pipefail
-release="/var/www/calculadora/releases/$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$release"
-# Extraer artefacto verificado en "$release".
-ln -s /var/www/calculadora/shared/data "$release/data"
-cd "$release"
-npm ci --omit=dev
-npm run build:css
-npm run check
-SESSION_SECRET_FILE=/run/secrets/dayzo_session node scripts/preflight.js
-ln -sfn "$release" /var/www/calculadora/current.next
-mv -Tf /var/www/calculadora/current.next /var/www/calculadora/current
-pm2 reload /var/www/calculadora/current/ecosystem.config.cjs --update-env
-curl -fsS http://127.0.0.1:3001/health-internal
+install -m 0750 deploy/deploy.sh /usr/local/sbin/dayzo-deploy
+dayzo-deploy /root/dayzo-release.tar.gz
 ```
 
-El secret puede inyectarse por systemd/secret manager en vez de archivo. `scripts/preflight.js` debe validar configuración sin imprimir valores.
+`deploy/deploy.sh` hace backup+restore drill, instala solo producción, ejecuta
+preflight sin imprimir secretos, cambia symlink atómicamente, recarga PM2 como
+usuario `dayzo`, comprueba health y revierte automáticamente si falla.
 
 ## Rollback de un comando
 
-Conservar el symlink anterior en `/var/www/calculadora/previous` durante el deploy:
-
 ```bash
-ln -sfn "$(readlink -f /var/www/calculadora/previous)" /var/www/calculadora/current.next \
-  && mv -Tf /var/www/calculadora/current.next /var/www/calculadora/current \
-  && pm2 reload /var/www/calculadora/current/ecosystem.config.cjs --update-env \
-  && curl -fsS http://127.0.0.1:3001/health-internal
+install -m 0750 deploy/rollback.sh /usr/local/sbin/dayzo-rollback
+dayzo-rollback
 ```
 
 No restaurar DB para un rollback de código si las migraciones fueron aditivas y compatibles. Restaurar DB solo ante corrupción confirmada, con el servicio detenido y preservando una copia forense.
@@ -107,7 +90,9 @@ map $http_upgrade $connection_upgrade {
 }
 ```
 
-Validar: `nginx -t && systemctl reload nginx`.
+Instalar `deploy/nginx-dayzo.conf`, validar con
+`nginx -t && systemctl reload nginx`. La configuración bloquea
+`/health-internal` en el proxy público.
 
 ## Firewall y bind
 
@@ -149,11 +134,12 @@ Observar 24 h: RSS, heap, reinicios, latencia, errores 5xx, fallos de fuentes y 
 ## Verificación posterior
 
 ```bash
-pm2 status
+sudo -u dayzo -H pm2 status
 curl -fsS http://127.0.0.1:3001/health-internal
 curl -fsSI https://dayzove.lat/login
 sqlite3 /var/www/calculadora/shared/data/historial.db 'PRAGMA quick_check;'
 journalctl -u nginx --since '-15 minutes' --no-pager
+systemctl status dayzo-backup.timer --no-pager
 ```
 
 Pruebas manuales sin PII: login válido/inválido, logout, cálculo conocido, crear/ver/simular/editar/eliminar una cotización de prueba y WebSocket.

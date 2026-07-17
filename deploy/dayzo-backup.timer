@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DAYZO SQLite backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 America/Caracas
+RandomizedDelaySec=20m
+Persistent=true
+Unit=dayzo-backup.service
+
+[Install]
+WantedBy=timers.target

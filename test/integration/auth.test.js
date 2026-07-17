@@ -176,6 +176,15 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   assert.doesNotMatch(csp, /cdn\.jsdelivr|cdnjs\.cloudflare|fonts\.googleapis/);
   assert.equal((await fetch(`${server.baseUrl}/vendor/chart.js`)).status, 200);
   assert.equal((await fetch(`${server.baseUrl}/vendor/fontawesome/css/all.min.css`)).status, 200);
+  const internalHealth = await fetch(`${server.baseUrl}/health-internal`);
+  assert.equal(internalHealth.status, 200);
+  const healthBody = await internalHealth.json();
+  assert.equal(healthBody.ready, true);
+  assert.equal(Object.hasOwn(healthBody, 'cache'), false);
+  assert.equal(Object.hasOwn(healthBody, 'users'), false);
+  assert.equal((await fetch(`${server.baseUrl}/health-internal`, {
+    headers: { 'X-Forwarded-For': '203.0.113.90' },
+  })).status, 404);
 
   const anonymous = new SessionClient(server.baseUrl);
   let result = await anonymous.request('/api/tasas-venezuela?limit=1');
