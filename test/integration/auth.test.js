@@ -216,11 +216,54 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   result = await firstViewer.request('/api/import-quotes', {
     method: 'POST',
     csrfToken: viewerCsrf,
-    body: { name: 'Aislada', quote: quoteFixture() },
+    body: {
+      name: 'Aislada',
+      quote: {
+        ...quoteFixture(),
+        inversionTotalUSD: 1,
+        costoUnitarioUSD: 0.01,
+      },
+    },
   });
   assert.equal(result.response.status, 200);
   const quoteId = result.data.id;
   assert.match(quoteId, /^[0-9a-f-]{36}$/i);
+
+  result = await firstViewer.request(`/api/import-quotes/${quoteId}`);
+  assert.equal(result.response.status, 200);
+  assert.equal(result.data.quote.quote.calculationVersion, 'dayzo-import-v2');
+  assert.ok(Math.abs(result.data.quote.quote.inversionTotalUSD - 89.21) < 1e-9);
+  assert.ok(Math.abs(result.data.quote.quote.costoUnitarioUSD - (89.21 / 24)) < 1e-9);
+
+  result = await firstViewer.request(`/api/import-quotes/${quoteId}`, {
+    method: 'PUT',
+    csrfToken: viewerCsrf,
+    body: {
+      name: 'Aislada actualizada',
+      quote: {
+        ...quoteFixture(),
+        ventaUnitarioUSD: 5,
+        gananciaTotalUSD: 999_999,
+        roiVentaPct: 999_999,
+      },
+    },
+  });
+  assert.equal(result.response.status, 200);
+  result = await firstViewer.request(`/api/import-quotes/${quoteId}`);
+  assert.equal(result.response.status, 200);
+  const savedQuote = result.data.quote.quote;
+  assert.ok(Math.abs(savedQuote.gananciaTotalUSD - ((5 - 89.21 / 24) * 24)) < 1e-9);
+  assert.ok(Math.abs(savedQuote.roiVentaPct - (((5 - 89.21 / 24) / (89.21 / 24)) * 100)) < 1e-9);
+
+  result = await firstViewer.request('/api/import-quotes', {
+    method: 'POST',
+    csrfToken: viewerCsrf,
+    body: {
+      name: 'Relación inválida',
+      quote: { ...quoteFixture(), unidadesTotales: 25 },
+    },
+  });
+  assert.equal(result.response.status, 400);
 
   const secondViewer = new SessionClient(server.baseUrl);
   result = await secondViewer.login(viewer2, viewerPassword);

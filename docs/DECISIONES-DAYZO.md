@@ -20,6 +20,9 @@
 
 - Estado: aceptada.
 - Decisión: entradas base validadas y derivados recalculados por funciones puras versionadas en el servidor. El cliente solo previsualiza.
+- Contrato: `calculationVersion="dayzo-import-v2"`. Entradas base: empresa/tarifa, cajas, unidades por caja, dimensiones, peso por caja, precio unitario USD, envío China por caja, comisiones y precio de venta opcional. La salida conserva los campos planos legacy, añade `input` normalizado y un `rateSnapshot`; cualquier total, ROI o margen enviado por el cliente se descarta y recalcula.
+- Compatibilidad: `empresaEnvioUSD` se acepta temporalmente como alias de `empresaTarifaUSD`; los campos planos existentes continúan en la respuesta. `unidadesTotales` puede llegar, pero debe coincidir exactamente con `cajas × unidadesPorCaja`.
+- Precisión: no se redondean costos internos; el redondeo es solo de presentación. El flete import2ven conserva los `ceil` del contrato legacy. Tolerancia de regresión automatizada: `1e-9`.
 - Motivo: impide persistir totales manipulados o inconsistentes.
 - Alternativas descartadas: comparar solamente `Number.isFinite` o confiar en la UI.
 - Riesgo/rollback: datos legacy incompletos; se conservan mediante adaptador y campos originales, sin migración destructiva.

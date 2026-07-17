@@ -17,6 +17,7 @@ const Database     = require('better-sqlite3');
 const SQLiteSessionStore = require('./sqlite-session-store');
 const V = require('./validators');
 const BcvVigencia = require('./bcv-vigencia');
+const ImportCalculation = require('./domain/import-calculation');
 
 // ─── SECCIÓN: LOGGER MÍNIMO ─────────────────────────────────────────────────
 // Sin winston/pino: ahorra RAM. Nunca loguear contraseñas ni tokens.
@@ -866,11 +867,22 @@ function mapImportQuoteDetail(row) {
 function prepareIncomingQuote(rawQuote) {
   const result = V.sanitizeImportQuote(rawQuote);
   if (!result.ok) return result;
-  const quote = result.value;
-  if (!quote.empresaNombre) quote.empresaNombre = inferEmpresaNombre(quote);
-  if (quote.empresaTarifaUSD == null && quote.empresaEnvioUSD != null) {
-    quote.empresaTarifaUSD = quote.empresaEnvioUSD;
+  const canonical = ImportCalculation.canonicalizeImportQuote(result.value);
+  if (!canonical.ok) {
+    return {
+      ok: false,
+      error: canonical.error.message,
+      code: canonical.error.code,
+    };
   }
+  const quote = canonical.value;
+  if (!quote.empresaNombre) quote.empresaNombre = inferEmpresaNombre(quote);
+  const liveCny = Number(CACHE_TASAS.cny);
+  quote.rateSnapshot = {
+    cny: liveCny > 0 ? liveCny : 6.53,
+    cnySource: liveCny > 0 ? 'bcv' : 'fallback',
+    capturedAt: new Date().toISOString(),
+  };
   return { ok: true, value: quote };
 }
 

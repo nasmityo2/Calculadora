@@ -1,9 +1,9 @@
 # Estado de mejora DAYZO
 
-Última actualización: 2026-07-17T08:12:00Z  
+Última actualización: 2026-07-17T08:20:00Z  
 Rama: `improvement/dayzo-web-first-2026`  
 Commit base: `0c2973ca428a9e9df9ba65d288a92e475bdcad55`  
-Fase actual: 2 — Cálculos canónicos
+Fase actual: 3 — API/lista de cotizaciones
 
 ## Estados
 
@@ -16,8 +16,8 @@ Fase actual: 2 — Cálculos canónicos
 
 - [x] Fase 0 — Baseline, respaldo y mapa
 - [x] Fase 1 — Seguridad urgente
-- [~] Fase 2 — Cálculos canónicos
-- [ ] Fase 3 — API/lista de cotizaciones
+- [x] Fase 2 — Cálculos canónicos
+- [~] Fase 3 — API/lista de cotizaciones
 - [ ] Fase 4 — UX cotizaciones
 - [ ] Fase 5 — Simulador
 - [ ] Fase 6 — Login DAYZO
@@ -143,3 +143,43 @@ Fase actual: 2 — Cálculos canónicos
 - Métricas antes/después: vulnerabilidades producción 5 → 0; heap/bundle runtime sin dependencia nueva.
 - Riesgo/rollback: revertir el commit de Fase 1 restaura comportamiento anterior, pero reintroduce credenciales/reset inseguro; rollback recomendado solo del release completo, nunca de la DB.
 - Siguiente tarea exacta: crear `src/domain/import-calculation.js`, congelar DTO/version y vectores.
+
+## Fase 2 — Cálculos canónicos
+
+- ID: F2-01 / dominio puro y DTO versionado
+- Estado: [x] COMPLETADO
+- Archivos: `src/domain/import-calculation.js`, `docs/DECISIONES-DAYZO.md`.
+- Evidencia: funciones puras para normalización, flete, comisiones, inversión, costos y plan de venta; `calculationVersion=dayzo-import-v2`; entrada normalizada preservada en `input`; salida plana compatible.
+- Comandos: `node --check src/domain/import-calculation.js`; `npm test`.
+- Resultado: reglas GCCARGO, Orinoco e import2ven/personalizado extraídas sin DOM ni dependencias.
+- Riesgo/rollback: la validación ahora rechaza ceros/extremos que antes podían persistirse; rollback del commit restaura aceptación insegura, sin tocar registros existentes.
+- Pendiente siguiente: integrar POST/PUT.
+
+- ID: F2-02 / recálculo autoritativo
+- Estado: [x] COMPLETADO
+- Archivos: `src/server.js`, `src/validators.js` (sin cambio requerido de esquema).
+- Evidencia: `prepareIncomingQuote()` sanea entradas base, recalcula todo con el dominio, descarta derivados cliente y añade snapshot CNY con fuente/timestamp. `empresaEnvioUSD` permanece como alias legacy.
+- Comandos: integración POST con inversión/costo manipulados y PUT con ganancia/ROI manipulados; GET confirmó valores canónicos.
+- Resultado: backend es fuente de verdad; `unidadesTotales` inconsistente devuelve 400.
+- Riesgo/rollback: payloads antiguos incompletos no pueden reescribirse hasta aportar bases; lectura de registros legacy no cambia.
+- Pendiente siguiente: vectores.
+
+- ID: F2-03 / regresión monetaria
+- Estado: [x] COMPLETADO
+- Archivos: `test/unit/import-calculation.test.js`, `test/integration/auth.test.js`, `package.json`.
+- Evidencia: 9 vectores de dominio: GCCARGO, Orinoco mínimo, import2ven por peso/densidad media/volumen, custom, envío China, múltiples cajas, ROI vs margen, precisión y entradas inválidas.
+- Comandos: `npm run check`.
+- Resultado: 15 unit + 3 integration verdes; vector legacy Orinoco conserva inversión 89.21 dentro de tolerancia `1e-9`; build CSS verde.
+- Prueba manual: flujo API crea y actualiza una cotización manipulada, luego detalle devuelve `dayzo-import-v2` y derivados recalculados.
+- Métricas: dependencia runtime nueva 0; módulo puro ~sin estado y sin impacto persistente de RAM.
+- Riesgo/rollback: redondeo se mantiene solo en UI; flete import2ven conserva `Math.ceil` legacy.
+- Pendiente siguiente: lista resumida paginada, errores y DB.
+
+- ID: F2-GATE / cierre
+- Estado: [x] COMPLETADO
+- Archivos modificados: dominio, servidor, tests, scripts npm, ADR y tracker.
+- Resumen git diff: módulo canónico nuevo y adaptación de escritura sin migración destructiva.
+- Comandos exactos: `npm run check`; `npm run test:integration`.
+- Resultado: gate verde.
+- Riesgo/rollback: revertir el commit; no hay migración de DB que deshacer.
+- Siguiente tarea exacta: Fase 3, reemplazar lista completa por resumen `limit<=50`/`offset` y contrato de error uniforme.
