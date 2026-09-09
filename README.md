@@ -53,9 +53,21 @@ unset ADMIN_RESET_PASSWORD ADMIN_RESET_USERNAME CONFIRM_ADMIN_RESET
 
 La rotación invalida todas las sesiones. No existe reset automático al reiniciar.
 
+## Reglas de moneda
+
 `tasas.cny` representa **CNY por USD** y se deriva de las dos publicaciones BCV.
 Si BCV no puede validarse, se conserva el último éxito con estado stale; la web
-muestra el fallback 6,53 como estimado, nunca como actualización exitosa.
+muestra el fallback 6,53 como estimado, nunca como actualización exitosa. Cada
+snapshot guarda su `cny` en la tabla `tasas`, para que «calcular con la tasa de
+otra fecha» no mezcle el yuan de hoy con el USDT de ayer.
+
+Dos reglas fijas, documentadas en `docs/DECISIONES-DAYZO.md` (ADR-013 y ADR-014):
+
+- **El USDT siempre se toma del precio de compra** (`p2pBuyVesPerUsdt`). El precio
+  de venta solo se muestra como dato de mercado. Ojo: la columna legacy
+  `binance_compra` guarda el precio de **venta**; el nombre es histórico.
+- **Las cotizaciones se leen en USDT, dólar BCV y yuan**, en ese orden y sin
+  bolívares. La calculadora de divisas sí convierte bolívares: es su función.
 
 ## PM2
 

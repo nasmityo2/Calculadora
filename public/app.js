@@ -76,6 +76,8 @@ let importEditBaseName = '';
 let importEditedQuote = null;
 let importEditedFullName = '';
 let importEditedCompanyTarifaUSD = null;
+let importNewQuotePhotos = [];
+let importEditPhotos = [];
 
 /** Solo una cotización puede estar expandida a la vez. */
 let importExpandedQuoteId = null;
@@ -90,6 +92,19 @@ const importQuoteDetailCache = new Map();
 let importQuoteDetailPanelAnchor = null;
 
 const CNY_FALLBACK_RATE = 6.53;
+const PURCHASE_CURRENCY_KEY = 'dayzo.purchaseCurrency';
+const IMPORT_DRAFT_KEY = 'dayzo.importDraft.v1';
+/** Moneda de entrada preferida del dispositivo (cada cotización guarda la suya). */
+let purchaseCurrency = (() => {
+    try {
+        const saved = localStorage.getItem(PURCHASE_CURRENCY_KEY);
+        return saved === 'USD' || saved === 'CNY' ? saved : 'CNY';
+    } catch (_) {
+        return 'CNY';
+    }
+})();
+/** id → 'historical' | 'live' para equivalentes de detalle */
+const importQuoteRateMode = new Map();
 
 function normalizeRatesContract(rates = {}) {
     return {
@@ -100,8 +115,191 @@ function normalizeRatesContract(rates = {}) {
     };
 }
 
+/** Yuanes por dólar en vivo. Es la tasa de todo salvo la calculadora histórica. */
 function getCnyRate() {
     return d.cny > 0 ? d.cny : CNY_FALLBACK_RATE;
+}
+
+/**
+ * Yuan de la calculadora de divisas: con «tasa de otra fecha» activa usa el yuan
+ * guardado ese día. Los snapshots anteriores a que se empezara a guardar el yuan
+ * traen 0, y entonces se usa el de hoy (el pie de la calculadora lo advierte).
+ */
+function getCalcCnyRate() {
+    const hist = Number(histMode?.tasas?.cny);
+    return hist > 0 ? hist : getCnyRate();
+}
+
+/** ¿El modo histórico está usando el yuan de hoy por falta de dato guardado? */
+function histCnyEsDeHoy() {
+    return Boolean(histMode) && !(Number(histMode?.tasas?.cny) > 0);
+}
+
+/**
+ * REGLA ÚNICA: toda referencia en USDT usa el PRECIO DE COMPRA del P2P
+ * (`binance` = tradeType BUY). El precio de venta solo se muestra como dato de
+ * mercado en las tarjetas de tasas, nunca se usa para convertir.
+ * @param {object} [src] Fuente de tasas; por defecto las de hoy.
+ */
+function getUsdtRate(src = d) {
+    return Number(src?.binance) > 0 ? Number(src.binance) : (Number(src?.binance_compra) || 0);
+}
+
+function isFileProtocol() {
+    return typeof location !== 'undefined' && location.protocol === 'file:';
+}
+
+function getImportParser() {
+    return (typeof DayzoImportParser !== 'undefined' && DayzoImportParser) || null;
+}
+
+function getImportQuoteView() {
+    return (typeof DayzoImportQuoteView !== 'undefined' && DayzoImportQuoteView) || null;
+}
+
+function setPurchaseCurrency(next, { convertValue = true } = {}) {
+    const parser = getImportParser();
+    const to = parser?.normalizeCurrency(next) || (next === 'USD' ? 'USD' : 'CNY');
+    const from = purchaseCurrency;
+    if (to === from) {
+        syncPurchaseCurrencyUI();
+        return;
+    }
+    // El precio y el envío del modo guiado comparten moneda: al cambiarla se
+    // convierten los dos, para que nunca queden mezclados en la misma cuenta.
+    if (convertValue && parser) {
+        for (const id of ['g-precio', 'g-envio']) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            const amount = parser.parseLocaleAmount(el.value);
+            const converted = amount != null
+                ? parser.convertDisplayedAmount(amount, from, to, getCnyRate())
+                : null;
+            if (converted == null) continue;
+            el.value = parser.formatAmountForInput(converted);
+            el.classList.add('c-imp-gfield--converted');
+            setTimeout(() => el.classList.remove('c-imp-gfield--converted'), 700);
+        }
+    }
+    purchaseCurrency = to;
+    try { localStorage.setItem(PURCHASE_CURRENCY_KEY, to); } catch (_) { /* ignore */ }
+    syncPurchaseCurrencyUI();
+    updatePurchasePriceEquivalence();
+    // Mantener la línea del modo rápido al día con la moneda recién elegida.
+    const quickEl = document.getElementById('imp-data');
+    const guidedVisible = !document.getElementById('imp-guided')?.classList.contains('hidden');
+    if (quickEl && guidedVisible) {
+        const raw = buildRawFromGuided();
+        if (raw) quickEl.value = raw;
+    }
+    calcImport();
+}
+
+function syncPurchaseCurrencyUI() {
+    const cnyBtn = document.getElementById('btn-currency-cny');
+    const usdBtn = document.getElementById('btn-currency-usd');
+    cnyBtn?.classList.toggle('is-active', purchaseCurrency === 'CNY');
+    usdBtn?.classList.toggle('is-active', purchaseCurrency === 'USD');
+    cnyBtn?.setAttribute('aria-pressed', String(purchaseCurrency === 'CNY'));
+    usdBtn?.setAttribute('aria-pressed', String(purchaseCurrency === 'USD'));
+    const hint = document.getElementById('imp-quick-hint');
+    if (hint) {
+        hint.innerHTML = `Formato: <strong>LxAxA · Peso · Unidades · Precio (cny/usdt) · Envío (cny/usdt) · Cajas</strong>. Sin moneda en el producto usa <strong>${purchaseCurrency}</strong>; el envío sin moneda usa USDT.`;
+    }
+    const quickInput = document.getElementById('imp-data');
+    if (quickInput) quickInput.placeholder = 'Ej: 30x30x30 15 50 32,5cny 4usdt 2';
+    const envioLabel = document.getElementById('g-envio-label');
+    if (envioLabel) {
+        envioLabel.innerText = purchaseCurrency === 'CNY'
+            ? 'Envío dentro de China (¥ por caja)'
+            : 'Envío dentro de China ($ por caja)';
+    }
+}
+
+/** Muestra bajo cada campo su equivalente en la otra moneda (¥ ↔ $). */
+function updatePurchasePriceEquivalence() {
+    const parser = getImportParser();
+    if (!parser) return;
+    const rate = getCnyRate();
+    const pares = [
+        ['g-precio', 'g-precio-equiv', 'por unidad'],
+        ['g-envio', 'g-envio-equiv', 'por caja'],
+    ];
+    for (const [inputId, noteId, sufijo] of pares) {
+        const el = document.getElementById(noteId);
+        if (!el) continue;
+        const amount = parser.parseLocaleAmount(document.getElementById(inputId)?.value);
+        if (!(amount > 0) || !(rate > 0)) { el.textContent = ''; continue; }
+        el.textContent = purchaseCurrency === 'CNY'
+            ? `≈ $${moneyFmt.format(amount / rate)} ${sufijo} · tasa ${moneyFmt.format(rate)} ¥/$`
+            : `≈ ¥${moneyFmt.format(amount * rate)} ${sufijo} · tasa ${moneyFmt.format(rate)} ¥/$`;
+    }
+}
+
+function persistImportDraft() {
+    if (isFileProtocol()) return;
+    try {
+        const draft = {
+            mode: document.getElementById('imp-guided')?.classList.contains('hidden') ? 'quick' : 'guided',
+            currency: purchaseCurrency,
+            quick: document.getElementById('imp-data')?.value || '',
+            guided: {
+                l: document.getElementById('g-largo')?.value || '',
+                w: document.getElementById('g-ancho')?.value || '',
+                h: document.getElementById('g-alto')?.value || '',
+                peso: document.getElementById('g-peso')?.value || '',
+                unid: document.getElementById('g-unid')?.value || '',
+                precio: document.getElementById('g-precio')?.value || '',
+                envio: document.getElementById('g-envio')?.value || '',
+                cajas: document.getElementById('g-cajas')?.value || '',
+            },
+            name: document.getElementById('import-quote-name')?.value || '',
+            savedAt: Date.now(),
+        };
+        sessionStorage.setItem(IMPORT_DRAFT_KEY, JSON.stringify(draft));
+    } catch (_) { /* ignore */ }
+}
+
+function restoreImportDraft() {
+    try {
+        const raw = sessionStorage.getItem(IMPORT_DRAFT_KEY);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (!draft || typeof draft !== 'object') return;
+        if (draft.currency === 'USD' || draft.currency === 'CNY') {
+            setPurchaseCurrency(draft.currency, { convertValue: false });
+        }
+        const g = draft.guided || {};
+        const set = (id, v) => {
+            const el = document.getElementById(id);
+            if (el && v != null) el.value = v;
+        };
+        set('g-largo', g.l); set('g-ancho', g.w); set('g-alto', g.h);
+        set('g-peso', g.peso); set('g-unid', g.unid); set('g-precio', g.precio);
+        set('g-envio', g.envio); set('g-cajas', g.cajas);
+        if (draft.quick) {
+            const q = document.getElementById('imp-data');
+            if (q) q.value = draft.quick;
+        }
+        if (draft.name) {
+            const n = document.getElementById('import-quote-name');
+            if (n) n.value = draft.name;
+        }
+        showToast('Se restauró el borrador de cotización.', 'info');
+    } catch (_) { /* ignore */ }
+}
+
+function clearImportDraft() {
+    try { sessionStorage.removeItem(IMPORT_DRAFT_KEY); } catch (_) { /* ignore */ }
+}
+
+function showFileProtocolBanner() {
+    const banner = document.getElementById('file-protocol-banner');
+    if (!banner) return;
+    banner.hidden = !isFileProtocol();
+    if (isFileProtocol()) {
+        document.body.classList.add('is-file-protocol');
+    }
 }
 
 // ═══════════════════════════════════════════════
@@ -194,7 +392,9 @@ let csrfToken   = null;
 
 /** Redirect to login, preserving current path as ?next= */
 function redirectToLogin() {
-    window.location.replace('/login?next=' + encodeURIComponent(window.location.pathname));
+    persistImportDraft();
+    const next = window.location.pathname + window.location.search;
+    window.location.replace('/login?next=' + encodeURIComponent(next || '/calculadoraa'));
 }
 
 /**
@@ -743,22 +943,31 @@ function switchView(view) {
 // ═══════════════════════════════════════════════
 // CALC — DIVISAS
 // ═══════════════════════════════════════════════
+/** Orden fijo de presentación: USDT → BCV → yuan → bolívares. */
+const CALC_CURRENCIES = ['USDT', 'BCV', 'CNY', 'VES'];
+
+/** Texto del campo de entrada según la moneda que escribes. */
+const CALC_INPUT_LABELS = {
+    VES:  ['Monto en bolívares', 'Bs'],
+    USDT: ['Monto en USDT', '₮'],
+    BCV:  ['Monto en dólar BCV', '$'],
+    CNY:  ['Monto en yuanes', '¥'],
+};
+
 function setM(s) {
     m = s;
-    ['VES','USDT','BCV','CNY'].forEach(k => {
+    CALC_CURRENCIES.forEach(k => {
         const b = document.getElementById('b-' + k);
-        if (b) { b.classList.remove('tab-active','text-white'); b.classList.add('text-slate-400'); }
+        if (!b) return;
+        const active = k === s;
+        b.classList.toggle('tab-active', active);
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('text-slate-400', !active);
+        b.setAttribute('aria-selected', String(active));
     });
-    const ab = document.getElementById('b-' + s);
-    if (ab) { ab.classList.add('tab-active','text-white'); ab.classList.remove('text-slate-400'); }
-    const cfg = {
-        VES:  ['MONTO EN BOLÍVARES', 'Bs'],
-        USDT: ['MONTO EN USDT', '₮'],
-        BCV:  ['MONTO EN DÓLAR BCV', '$'],
-        CNY:  ['MONTO EN YUANES', '¥']
-    };
-    document.getElementById('l-input').innerText = cfg[s][0];
-    document.getElementById('s-input').innerText = cfg[s][1];
+    const [label, suffix] = CALC_INPUT_LABELS[s] || CALC_INPUT_LABELS.VES;
+    document.getElementById('l-input').innerText = label;
+    document.getElementById('s-input').innerText = suffix;
     calc();
 }
 
@@ -777,47 +986,55 @@ function copyToClipboard(id) {
     }).catch(() => showToast('No se pudo copiar', 'error', 1800));
 }
 
-function calc() {
-    const raw = document.getElementById('monto').value;
-    const v   = parseLocaleAmount(raw);
-    let v1 = 0, v2 = 0, v3 = 0;
-    // Fuente de tasas: histórica si está activa, si no las tasas en vivo
-    const src = (histMode && histMode.tasas) ? histMode.tasas : d;
-    const tr  = src.binance_compra || src.binance;
-    const bcv = src.bcv || 0;
-    if (m === 'VES') {
-        document.getElementById('res1-l').innerText = 'USDT (P2P)';
-        v1 = tr > 0 ? v / tr : 0;
-        document.getElementById('res2-l').innerText = 'Dólar BCV';
-        v2 = bcv > 0 ? v / bcv : 0;
-        document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = tr > 0 ? (v / tr) * getCnyRate() : 0;
-    } else if (m === 'USDT') {
-        document.getElementById('res1-l').innerText = 'Bolívares';
-        v1 = v * tr;
-        document.getElementById('res2-l').innerText = 'Dólar BCV (Ref)';
-        v2 = bcv > 0 ? (v * tr) / bcv : 0;
-        document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = v * getCnyRate();
-    } else if (m === 'BCV') {
-        document.getElementById('res1-l').innerText = 'Bolívares';
-        v1 = v * bcv;
-        document.getElementById('res2-l').innerText = 'USDT (Ref)';
-        v2 = tr > 0 ? (v * bcv) / tr : 0;
-        document.getElementById('res3-l').innerText = 'Yuanes';
-        v3 = tr > 0 ? ((v * bcv) / tr) * getCnyRate() : 0;
-    } else if (m === 'CNY') {
-        const u = v / getCnyRate();
-        document.getElementById('res1-l').innerText = 'USDT';
-        v1 = u;
-        document.getElementById('res2-l').innerText = 'Bolívares';
-        v2 = u * tr;
-        document.getElementById('res3-l').innerText = 'Dólar BCV';
-        v3 = bcv > 0 ? (u * tr) / bcv : 0;
+/** Pie de la calculadora: deja a la vista con qué tasas se hizo la cuenta. */
+function renderCalcRateNote(usdtRate, bcvRate, cnyRate) {
+    const el = document.getElementById('calc-rate-note');
+    if (!el) return;
+    const partes = [
+        `USDT compra Bs ${usdtRate > 0 ? moneyFmt.format(usdtRate) : '--'}`,
+        `BCV Bs ${bcvRate > 0 ? moneyFmt.format(bcvRate) : '--'}`,
+        `Yuan ${moneyFmt.format(cnyRate)} ¥/$`,
+    ];
+    if (histMode) {
+        partes.unshift('Tasas del ' + (histMode.consulta?.fecha || 'histórico'));
+        if (histCnyEsDeHoy()) partes.push('yuan de hoy (no hay dato guardado de esa fecha)');
     }
-    document.getElementById('res1-v').innerText = moneyFmt.format(v1);
-    document.getElementById('res2-v').innerText = moneyFmt.format(v2);
-    document.getElementById('res3-v').innerText = moneyFmt.format(v3);
+    el.innerText = partes.join(' · ');
+}
+
+/**
+ * Calculadora de divisas. Un solo camino: lo que escribes se lleva a USDT y
+ * desde ahí se derivan las otras tres monedas. Las filas nunca cambian de
+ * etiqueta; solo se oculta la de la moneda que estás escribiendo.
+ */
+function calc() {
+    const v = parseLocaleAmount(document.getElementById('monto').value) || 0;
+    const src = (histMode && histMode.tasas) ? histMode.tasas : d;
+    const usdtRate = getUsdtRate(src);       // Bs por USDT (siempre precio de compra)
+    const bcvRate  = Number(src.bcv) || 0;   // Bs por dólar BCV
+    const cnyRate  = getCalcCnyRate();       // yuanes por dólar (histórico si aplica)
+
+    let usdt = 0;
+    if (m === 'USDT')     usdt = v;
+    else if (m === 'VES') usdt = usdtRate > 0 ? v / usdtRate : 0;
+    else if (m === 'BCV') usdt = (bcvRate > 0 && usdtRate > 0) ? (v * bcvRate) / usdtRate : 0;
+    else if (m === 'CNY') usdt = cnyRate > 0 ? v / cnyRate : 0;
+
+    const ves = usdt * usdtRate;
+    const valores = {
+        USDT: usdt,
+        BCV:  bcvRate > 0 ? ves / bcvRate : 0,
+        CNY:  usdt * cnyRate,
+        VES:  ves,
+    };
+
+    for (const key of CALC_CURRENCIES) {
+        const row = document.getElementById('row-res-' + key);
+        const val = document.getElementById('res-' + key);
+        if (row) row.hidden = (key === m);
+        if (val) val.innerText = moneyFmt.format(valores[key]);
+    }
+    renderCalcRateNote(usdtRate, bcvRate, cnyRate);
 }
 
 // ═══════════════════════════════════════════════
@@ -1090,11 +1307,24 @@ async function refresh() {
 }
 
 
+/** ISO → "30/08/2026, 02:30 a. m." en hora de Caracas. Devuelve null si no aplica. */
+function formatHoraCaracas(iso) {
+    if (!iso) return null;
+    const fecha = new Date(iso);
+    if (Number.isNaN(fecha.getTime())) return null;
+    return fecha.toLocaleString('es-VE', {
+        timeZone: 'America/Caracas',
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+}
+
 function updateUI(j) {
     const t = j && j.tasas;
     if (!t) { refreshImpUnitarioRates(); return; }
     ratesDisplayMeta = {
-        lastUpdate: j.lastSuccessAt?.binance || j.last_update || j.fecha || null,
+        // `lastSuccessAt` viene en ISO: se muestra como hora de Caracas, no en crudo.
+        lastUpdate: formatHoraCaracas(j.lastSuccessAt?.binance) || j.last_update || j.fecha || null,
         stale: j.sourceStatus?.stale === true,
         cnyFallback: !(Number(t.cny) > 0),
     };
@@ -1205,20 +1435,40 @@ function connectWS() {
 // ═══════════════════════════════════════════════
 const GCCARGO_TARIFA_USD = 770;
 
-/** USD → equivalente $ BCV (P2P compra vs tasa BCV) y yuanes (snapshot/fallback visible). */
-function formatCostoUnitarioCurrencies(usd) {
+/**
+ * Orden canónico de presentación monetaria en toda la app:
+ *   1) USDT (base del cálculo)  2) dólar BCV  3) yuanes
+ * Nunca bolívares: las cotizaciones se leen en estas tres monedas.
+ * El USDT siempre se convierte con el precio de COMPRA del P2P (getUsdtRate).
+ */
+function formatCostoUnitarioCurrencies(usd, cnyRate = getCnyRate()) {
     const u = Number(usd) || 0;
     if (!Number.isFinite(u) || u <= 0) {
-        return { usd: '$0.00', bcv: '$0.00 (BCV)', cny: '¥0.00' };
+        return {
+            usdt: '$0.00',
+            bcv: '$0.00 BCV',
+            cny: '¥0.00',
+            usd: '$0.00',
+        };
     }
-    const br   = d.bcv || 0;
-    const binr = d.binance_compra || d.binance || 0;
-    const bcvUsd = (br > 0 && binr > 0) ? (u * binr) / br : null;
+    const br = d.bcv || 0;
+    const usdt = getUsdtRate();
+    const bcvUsd = (br > 0 && usdt > 0) ? (u * usdt) / br : null;
+    const rate = Number(cnyRate) > 0 ? Number(cnyRate) : getCnyRate();
     return {
+        usdt: usdFmt.format(u),
+        bcv: bcvUsd != null ? `${usdFmt.format(bcvUsd)} BCV` : '-- BCV',
+        cny: `¥${moneyFmt.format(u * rate)}`,
         usd: usdFmt.format(u),
-        bcv: bcvUsd != null ? usdFmt.format(bcvUsd) + ' (BCV)' : '-- (BCV)',
-        cny: '¥' + moneyFmt.format(u * getCnyRate()),
     };
+}
+
+/** Línea secundaria de un monto: "$X BCV · ¥Y". Acepta negativos (ganancias). */
+function crossCurrencies(usd, cnyRate = getCnyRate()) {
+    const u = Number(usd) || 0;
+    const signo = u < 0 ? '−' : '';
+    const f = formatCostoUnitarioCurrencies(Math.abs(u), cnyRate);
+    return `${signo}${f.bcv} · ${signo}${f.cny}`;
 }
 
 function setImpUnitarioDisplay(usd) {
@@ -1226,13 +1476,25 @@ function setImpUnitarioDisplay(usd) {
     const el = document.getElementById('imp-unitario');
     const elBcv = document.getElementById('imp-unitario-bcv');
     const elCny = document.getElementById('imp-unitario-cny');
-    if (el) el.innerText = f.usd;
+    if (el) el.innerText = f.usdt;
+    if (elBcv) elBcv.innerText = f.bcv;
+    if (elCny) elCny.innerText = f.cny;
+}
+
+/** El costo por caja se lee en las mismas tres monedas que el unitario. */
+function setImpCajaDisplay(usd) {
+    const f = formatCostoUnitarioCurrencies(usd);
+    const el = document.getElementById('imp-caja');
+    const elBcv = document.getElementById('imp-caja-bcv');
+    const elCny = document.getElementById('imp-caja-cny');
+    if (el) el.innerText = f.usdt;
     if (elBcv) elBcv.innerText = f.bcv;
     if (elCny) elCny.innerText = f.cny;
 }
 
 function refreshImpUnitarioRates() {
     if (gCostoUnitario > 0) setImpUnitarioDisplay(gCostoUnitario);
+    if (gCostoCaja > 0) setImpCajaDisplay(gCostoCaja);
     calcGanancia();
 
     // Mientras se edita, el panel de detalle vive DENTRO del listado; re-renderizar
@@ -1256,10 +1518,6 @@ const ORINOCO_TARIFA_USD    = 865;
 const IMPORT2VEN_TARIFA_USD = 1030;
 const ORINOCO_MIN_USD       = 35;     // tarifa mínima Orinoco
 const ORINOCO_MIN_VOL_M3    = 0.035;  // umbral de volumen por caja
-
-function isGccargoTarifa(tarifa) {
-    return Number(tarifa) === GCCARGO_TARIFA_USD;
-}
 
 /** Identifica la empresa por su tarifa base. 'custom' = personalizado (lógica densidad). */
 function importCompanyKind(tarifaBase) {
@@ -1397,30 +1655,62 @@ function gv(id) {
     return String(parseLocaleAmount(raw));
 }
 
-/** Construye la cadena corta canónica desde los campos del modo guiado. */
+/** Sufijo de moneda que entiende el parser rápido. */
+function currencySuffix(currency) {
+    return currency === 'CNY' ? 'cny' : 'usdt';
+}
+
+/**
+ * Construye la línea corta desde los campos del modo guiado.
+ * El sufijo de moneda es obligatorio: sin él, pasar de guiado a rápido perdía
+ * la moneda elegida y la cuenta cambiaba sola.
+ */
 function buildRawFromGuided() {
     const l = gv('g-largo'), w = gv('g-ancho'), h = gv('g-alto');
     const peso = gv('g-peso'), unid = gv('g-unid'), precio = gv('g-precio');
     const envio = gv('g-envio'), cajas = gv('g-cajas');
     if (!l || !w || !h || !peso || !unid || !precio) return '';
-    let raw = `${l}x${w}x${h} ${peso} ${unid} ${precio}`;
+    const sufijo = currencySuffix(purchaseCurrency);
+    let raw = `${l}x${w}x${h} ${peso} ${unid} ${precio}${sufijo}`;
     const envioN = parseFloat(envio) || 0;
     const cajasN = parseInt(cajas, 10) || 1;
-    if (envioN > 0 || cajasN > 1) raw += ` ${envioN}`;
+    if (envioN > 0 || cajasN > 1) raw += ` ${envioN}${sufijo}`;
     if (cajasN > 1) raw += ` ${cajasN}`;
     return raw;
 }
 
-/** Rellena los campos del modo guiado desde una cadena corta. */
+/**
+ * Rellena los campos del modo guiado desde una línea corta, usando el mismo
+ * parser que hace el cálculo (antes se troceaba por espacios y un token de
+ * moneda suelto terminaba en el campo de envío).
+ */
 function fillGuidedFromRaw(raw) {
-    const clean = (raw || '').replace(/[/\\*]/g, 'x').toLowerCase().trim();
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v != null && v !== '' && !isNaN(parseFloat(v))) ? v : ''; };
-    if (!clean) { ['g-largo','g-ancho','g-alto','g-peso','g-unid','g-precio','g-envio','g-cajas'].forEach(id => set(id, '')); return; }
-    const p = clean.split(/\s+/);
-    const dims = (p[0] || '').split('x');
-    if (dims.length === 3) { set('g-largo', dims[0]); set('g-ancho', dims[1]); set('g-alto', dims[2]); }
-    set('g-peso', p[1]); set('g-unid', p[2]); set('g-precio', p[3]);
-    set('g-envio', p[4]); set('g-cajas', p[5]);
+    const ids = ['g-largo','g-ancho','g-alto','g-peso','g-unid','g-precio','g-envio','g-cajas'];
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : String(v); };
+    const parser = getImportParser();
+    const parsed = raw && parser ? parser.parseQuickImportLine(raw, { defaultCurrency: purchaseCurrency }) : null;
+    if (!parsed?.ok) { ids.forEach(id => set(id, '')); return; }
+
+    const v = parsed.value;
+    // La línea manda: si trae moneda, el selector se alinea con ella.
+    if (v.purchasePrice.currency !== purchaseCurrency) {
+        purchaseCurrency = v.purchasePrice.currency;
+        try { localStorage.setItem(PURCHASE_CURRENCY_KEY, purchaseCurrency); } catch (_) { /* ignore */ }
+        syncPurchaseCurrencyUI();
+    }
+    const envio = v.envioChinaPrice || { amount: 0, currency: purchaseCurrency };
+    const envioEnMoneda = envio.currency === purchaseCurrency
+        ? envio.amount
+        : (parser.convertDisplayedAmount(envio.amount, envio.currency, purchaseCurrency, getCnyRate()) ?? envio.amount);
+
+    set('g-largo', v.dimensionesCm.l);
+    set('g-ancho', v.dimensionesCm.w);
+    set('g-alto', v.dimensionesCm.h);
+    set('g-peso', v.pesoPorCajaKg);
+    set('g-unid', v.unidadesPorCaja);
+    set('g-precio', parser.formatAmountForInput(v.purchasePrice.amount));
+    set('g-envio', envioEnMoneda > 0 ? parser.formatAmountForInput(envioEnMoneda) : '');
+    set('g-cajas', v.cajas > 1 ? v.cajas : '');
 }
 
 function onGuidedImportInput() {
@@ -1451,113 +1741,197 @@ function setImportInputMode(mode) {
     calcImport();
 }
 
-function calcImport() {
-    const val = document.getElementById('imp-data').value.trim();
-    if (!val) {
-        document.getElementById('imp-results').style.opacity = '0.5';
-        gCostoUnitario = gCostoCaja = 0;
-        setImpUnitarioDisplay(0);
-        calcGanancia(); return;
-    }
-    document.getElementById('imp-results').style.opacity = '1';
+function clearImportPreview() {
+    document.getElementById('imp-results').style.opacity = '0.5';
+    gCostoUnitario = gCostoCaja = 0;
+    setImpUnitarioDisplay(0);
+    setImpCajaDisplay(0);
+    // Sin entrada válida no hay nada que guardar: dejar la última cotización
+    // viva permitía guardar números que ya no se ven en pantalla.
+    lastImportQuote = null;
+    calcGanancia();
+}
 
-    const clean = val.replace(/[/\\*]/g, 'x').toLowerCase();
-    const p = clean.split(/\s+/);
-    if (p.length < 4) {
-        document.getElementById('imp-results').style.opacity = '0.5';
-        gCostoUnitario = gCostoCaja = 0;
-        setImpUnitarioDisplay(0);
-        calcGanancia();
+function applyImportPreviewFromParsed(parsed, entradaRaw) {
+    const parser = getImportParser();
+    const rate = getCnyRate();
+    const pu = parser.purchaseToUsd(parsed.purchasePrice, rate);
+    if (!(pu > 0)) {
+        clearImportPreview();
         return;
     }
+    const { l, w, h } = parsed.dimensionesCm;
+    const pbc = parsed.pesoPorCajaKg;
+    const ubc = parsed.unidadesPorCaja;
+    const ecbc = parsed.envioChinaPrice
+        ? (parser.purchaseToUsd(parsed.envioChinaPrice, rate) || 0)
+        : (parsed.envioChinaPorCajaUSD || 0);
+    const nc = parsed.cajas || 1;
 
+    document.getElementById('imp-results').style.opacity = '1';
+    const envio = computeImportShipping(l, w, h, nc, pbc, importTarifaBase);
+    const vTot = envio.volumenM3;
+    const pTot = envio.pesoKg;
+    const cEnv = envio.fleteUSD;
+    const tCob = envio.tipoCobro;
+    const tU = ubc * nc;
+    const tM = tU * pu;
+    const tEC = ecbc * nc;
+    const bC = tM + tEC;
+    const fP = bC * feePlataforma;
+    const fB = bC * feeBanco;
+    const sT = tM + tEC + fP + fB;
+    const iT = tM + tEC + fP + fB + cEnv;
+
+    gCostoUnitario = iT / tU;
+    gCostoCaja = iT / nc;
+    gUnidadesPorCaja = ubc;
+
+    const volPorCajaTxt = nc > 1 ? ` · ${n3(envio.volumenPorCajaM3)}/caja` : '';
+    document.getElementById('imp-vol').innerText = vTot.toFixed(3) + ' m³' + volPorCajaTxt;
+    document.getElementById('imp-peso').innerText = pTot.toFixed(2) + ' kg';
+    document.getElementById('imp-tipo').innerText = tCob;
+    document.getElementById('imp-mercancia').innerText = usdFmt.format(tM);
+
+    const noteEl = document.getElementById('imp-tarifa-min-note');
+    if (noteEl) {
+        if (envio.tarifaMinAplicada) {
+            noteEl.style.display = 'flex';
+            noteEl.querySelector('span').innerText = `Tarifa mínima aplicada: ${usdFmt.format(ORINOCO_MIN_USD)} por caja (volumen < 0.035 m³)`;
+        } else {
+            noteEl.style.display = 'none';
+        }
+    }
+
+    const rowCh = document.getElementById('row-envio-china');
+    if (tEC > 0) {
+        rowCh.style.display = 'flex';
+        document.getElementById('imp-envio-china').innerText = '+' + usdFmt.format(tEC);
+    } else rowCh.style.display = 'none';
+
+    document.getElementById('imp-fee-plat').innerText = '+' + usdFmt.format(fP);
+    document.getElementById('imp-fee-banco').innerText = '+' + usdFmt.format(fB);
+    document.getElementById('imp-subtotal').innerText = usdFmt.format(sT);
+    document.getElementById('imp-flete').innerText = '+' + usdFmt.format(cEnv) + (nc > 1 ? ` (${usdFmt.format(envio.fletePorCajaUSD)} × ${nc})` : '');
+    document.getElementById('imp-total').innerText = usdFmt.format(iT);
+    setImpUnitarioDisplay(gCostoUnitario);
+    setImpCajaDisplay(gCostoCaja);
+
+    const cnyUnit = parsed.purchasePrice.currency === 'CNY'
+        ? parsed.purchasePrice.amount
+        : pu * rate;
+
+    lastImportQuote = {
+        version: 3,
+        calculationVersion: 'dayzo-import-v3',
+        entradaRaw,
+        empresaNombre: importEmpresaNombre,
+        empresaTarifaUSD: importTarifaBase,
+        empresaEnvioUSD: importTarifaBase,
+        cajas: nc,
+        unidadesPorCaja: ubc,
+        unidadesTotales: tU,
+        dimensionesCm: { l, w, h },
+        pesoPorCajaKg: pbc,
+        purchasePrice: { ...parsed.purchasePrice },
+        purchasePriceOriginalAmount: parsed.purchasePrice.amount,
+        purchasePriceOriginalCurrency: parsed.purchasePrice.currency,
+        precioMercanciaPorUnidadUSD: pu,
+        precioMercanciaPorUnidadCNY: cnyUnit,
+        envioChinaPorCajaUSD: ecbc,
+        envioChinaPrice: parsed.envioChinaPrice
+            ? { ...parsed.envioChinaPrice }
+            : { amount: ecbc, currency: 'USD' },
+        volumenM3: vTot,
+        volumenPorCajaM3: envio.volumenPorCajaM3,
+        pesoKg: pTot,
+        tipoCobro: tCob,
+        costoMercanciaUSD: tM,
+        envioChinaUSD: tEC,
+        plataformaUSD: fP,
+        comisionBancoUSD: fB,
+        subtotalUSD: sT,
+        envioInternacionalUSD: cEnv,
+        fletePorCajaUSD: envio.fletePorCajaUSD,
+        tarifaMinAplicada: envio.tarifaMinAplicada,
+        inversionTotalUSD: iT,
+        costoUnitarioUSD: gCostoUnitario,
+        costoPorCajaUSD: gCostoCaja,
+        feePlataforma,
+        feeBanco,
+    };
+    persistImportDraft();
+    calcGanancia();
+}
+
+function calcImport() {
+    const parser = getImportParser();
+    const errEl = document.getElementById('imp-quick-error');
+    if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
+    updatePurchasePriceEquivalence();
+
+    const guidedVisible = !document.getElementById('imp-guided')?.classList.contains('hidden');
     try {
-        const dims = p[0].split('x');
-        if (dims.length !== 3) {
-            document.getElementById('imp-results').style.opacity = '0.5';
-            gCostoUnitario = gCostoCaja = 0;
-            setImpUnitarioDisplay(0);
-            calcGanancia();
+        if (!parser) {
+            clearImportPreview();
             return;
         }
-        const l = parseLocaleAmount(dims[0]), w = parseLocaleAmount(dims[1]), h = parseLocaleAmount(dims[2]);
-        const pbc = parseLocaleAmount(p[1]);
-        const ubc = parseInt(p[2], 10);
-        const pu  = parseLocaleAmount(p[3]) / getCnyRate();
-        const ecbc = p.length >= 5 ? parseLocaleAmount(p[4]) : 0;
-        const nc   = p.length >= 6 ? parseInt(p[5], 10) : 1;
-
-        if ([l,w,h,pbc,ubc,pu].some(n => isNaN(n))) {
-            document.getElementById('imp-results').style.opacity = '0.5';
-            gCostoUnitario = gCostoCaja = 0;
-            setImpUnitarioDisplay(0);
-            calcGanancia();
-            return;
-        }
-
-        const envio = computeImportShipping(l, w, h, nc, pbc, importTarifaBase);
-        const vTot = envio.volumenM3;
-        const pTot = envio.pesoKg;
-        const cEnv = envio.fleteUSD;
-        const tCob = envio.tipoCobro;
-
-        const tU  = ubc * nc;
-        const tM  = tU * pu;
-        const tEC = ecbc * nc;
-        const bC  = tM + tEC;
-        const fP  = bC * feePlataforma;
-        const fB  = bC * feeBanco;
-        const sT  = tM + tEC + fP + fB;
-        const iT  = tM + tEC + fP + fB + cEnv;
-
-        gCostoUnitario  = iT / tU;
-        gCostoCaja      = iT / nc;
-        gUnidadesPorCaja = ubc;
-
-        const volPorCajaTxt = nc > 1 ? ` · ${n3(envio.volumenPorCajaM3)}/caja` : '';
-        document.getElementById('imp-vol').innerText   = vTot.toFixed(3) + ' m³' + volPorCajaTxt;
-        document.getElementById('imp-peso').innerText  = pTot.toFixed(2) + ' kg';
-        document.getElementById('imp-tipo').innerText  = tCob;
-        document.getElementById('imp-mercancia').innerText = usdFmt.format(tM);
-
-        // Nota informativa de tarifa mínima Orinoco
-        const noteEl = document.getElementById('imp-tarifa-min-note');
-        if (noteEl) {
-            if (envio.tarifaMinAplicada) {
-                noteEl.style.display = 'flex';
-                noteEl.querySelector('span').innerText = `Tarifa mínima aplicada: ${usdFmt.format(ORINOCO_MIN_USD)} por caja (volumen < 0.035 m³)`;
-            } else {
-                noteEl.style.display = 'none';
+        let parsedResult;
+        let entradaRaw;
+        if (guidedVisible) {
+            const l = parser.parseLocaleAmount(document.getElementById('g-largo')?.value);
+            const w = parser.parseLocaleAmount(document.getElementById('g-ancho')?.value);
+            const h = parser.parseLocaleAmount(document.getElementById('g-alto')?.value);
+            const pbc = parser.parseLocaleAmount(document.getElementById('g-peso')?.value);
+            const ubc = Number.parseInt(document.getElementById('g-unid')?.value, 10);
+            const priceTok = document.getElementById('g-precio')?.value;
+            const purchase = parser.parsePurchasePriceToken(priceTok, purchaseCurrency);
+            if (!purchase.ok) {
+                clearImportPreview();
+                return;
+            }
+            // El envío China comparte moneda con el precio: si compras en yuanes,
+            // el flete interno también se escribe en yuanes.
+            const ecbc = parser.parseLocaleAmount(document.getElementById('g-envio')?.value) || 0;
+            const nc = Number.parseInt(document.getElementById('g-cajas')?.value, 10) || 1;
+            if ([l, w, h, pbc].some((n) => !(n > 0)) || !Number.isSafeInteger(ubc) || ubc <= 0) {
+                clearImportPreview();
+                return;
+            }
+            entradaRaw = buildRawFromGuided();
+            parsedResult = {
+                ok: true,
+                value: {
+                    dimensionesCm: { l, w, h },
+                    pesoPorCajaKg: pbc,
+                    unidadesPorCaja: ubc,
+                    purchasePrice: purchase.value,
+                    envioChinaPrice: { amount: ecbc, currency: purchase.value.currency },
+                    cajas: nc,
+                },
+            };
+        } else {
+            const val = document.getElementById('imp-data')?.value.trim() || '';
+            if (!val) {
+                clearImportPreview();
+                return;
+            }
+            parsedResult = parser.parseQuickImportLine(val, { defaultCurrency: purchaseCurrency });
+            entradaRaw = val;
+            if (!parsedResult.ok) {
+                if (errEl) {
+                    errEl.hidden = false;
+                    errEl.textContent = `${parsedResult.error.message} Ejemplo: 30x30x30 15 50 ¥32,5`;
+                }
+                clearImportPreview();
+                return;
             }
         }
-
-        const rowCh = document.getElementById('row-envio-china');
-        if (tEC > 0) { rowCh.style.display = 'flex'; document.getElementById('imp-envio-china').innerText = '+' + usdFmt.format(tEC); }
-        else rowCh.style.display = 'none';
-
-        document.getElementById('imp-fee-plat').innerText  = '+' + usdFmt.format(fP);
-        document.getElementById('imp-fee-banco').innerText = '+' + usdFmt.format(fB);
-        document.getElementById('imp-subtotal').innerText  = usdFmt.format(sT);
-        document.getElementById('imp-flete').innerText     = '+' + usdFmt.format(cEnv) + (nc > 1 ? ` (${usdFmt.format(envio.fletePorCajaUSD)} × ${nc})` : '');
-        document.getElementById('imp-total').innerText     = usdFmt.format(iT);
-        setImpUnitarioDisplay(gCostoUnitario);
-        document.getElementById('imp-caja').innerText      = usdFmt.format(gCostoCaja);
-
-        lastImportQuote = {
-            version: 1, entradaRaw: val,
-            empresaNombre: importEmpresaNombre, empresaTarifaUSD: importTarifaBase, empresaEnvioUSD: importTarifaBase,
-            cajas: nc, unidadesPorCaja: ubc, unidadesTotales: tU,
-            dimensionesCm: { l, w, h },
-            pesoPorCajaKg: pbc, precioMercanciaPorUnidadUSD: pu, envioChinaPorCajaUSD: ecbc,
-            volumenM3: vTot, volumenPorCajaM3: envio.volumenPorCajaM3, pesoKg: pTot, tipoCobro: tCob,
-            costoMercanciaUSD: tM, envioChinaUSD: tEC, plataformaUSD: fP, comisionBancoUSD: fB,
-            subtotalUSD: sT, envioInternacionalUSD: cEnv, fletePorCajaUSD: envio.fletePorCajaUSD,
-            tarifaMinAplicada: envio.tarifaMinAplicada, inversionTotalUSD: iT,
-            costoUnitarioUSD: gCostoUnitario, costoPorCajaUSD: gCostoCaja,
-            feePlataforma, feeBanco
-        };
-        calcGanancia();
-    } catch (e) { console.error('calcImport error:', e); }
+        applyImportPreviewFromParsed(parsedResult.value, entradaRaw);
+    } catch (e) {
+        console.error('calcImport error:', e);
+        clearImportPreview();
+    }
 }
 
 // ═══════════════════════════════════════════════
@@ -1637,28 +2011,27 @@ function setSimType(t) {
     calcGanancia();
 }
 
+/** Modos del simulador: escribir el precio en USDT, en yuanes, o pedir un ROI. */
+const SIM_MODES = {
+    precio: { btn: 'btn-mode-precio', icon: '$', placeholder: 'Precio de venta en USDT', l1: 'Ganancia neta', l2: 'Rentabilidad (ROI)' },
+    cny:    { btn: 'btn-mode-cny',    icon: '¥', placeholder: 'Precio de venta en yuanes', l1: 'Ganancia neta', l2: 'Rentabilidad (ROI)' },
+    pct:    { btn: 'btn-mode-pct',    icon: '%', placeholder: 'ROI deseado sobre el costo (%)', l1: 'Precio sugerido', l2: 'Ganancia estimada' },
+};
+
 function setSimMode(m) {
+    if (!SIM_MODES[m]) m = 'precio';
     simMode = m;
     const on  = 'c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth bg-indigo-600 text-white shadow';
     const off = 'c-sim-tab py-1.5 rounded-md text-[9px] font-bold transition-smooth text-slate-400 hover:text-white';
-    document.getElementById('btn-mode-precio').className = m === 'precio' ? on : off;
-    const bsBtn = document.getElementById('btn-mode-bs');
-    if (bsBtn) bsBtn.className = m === 'bs' ? on : off;
-    document.getElementById('btn-mode-pct').className    = m === 'pct'    ? on : off;
-    const icon = document.getElementById('sim-input-icon');
-    const ip   = document.getElementById('sim-input');
-    const l1   = document.getElementById('lbl-res-1');
-    const l2   = document.getElementById('lbl-res-2');
-    if (m === 'precio') {
-        icon.innerText = '$'; ip.placeholder = 'Precio venta (USD)';
-        l1.innerText = 'Ganancia Neta'; l2.innerText = 'Rentabilidad (ROI)';
-    } else if (m === 'bs') {
-        icon.innerText = 'Bs'; ip.placeholder = 'Precio venta (Bs.)';
-        l1.innerText = 'Ganancia Neta'; l2.innerText = 'Rentabilidad (ROI)';
-    } else {
-        icon.innerText = '%'; ip.placeholder = 'ROI deseado sobre costo (%)';
-        l1.innerText = 'Precio Sugerido'; l2.innerText = 'Ganancia Estimada';
+    for (const [key, cfg] of Object.entries(SIM_MODES)) {
+        const btn = document.getElementById(cfg.btn);
+        if (btn) btn.className = key === m ? on : off;
     }
+    const cfg = SIM_MODES[m];
+    document.getElementById('sim-input-icon').innerText = cfg.icon;
+    document.getElementById('sim-input').placeholder = cfg.placeholder;
+    document.getElementById('lbl-res-1').innerText = cfg.l1;
+    document.getElementById('lbl-res-2').innerText = cfg.l2;
     calcGanancia();
 }
 
@@ -1710,26 +2083,23 @@ function drawSimSparkline(cb, totalCount, currentSale) {
 /** Refresca el panel de tasas de referencia y el costo base mostrado en el simulador. */
 function updateSimReferenceUI() {
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
-    const binBuy  = Number(d.binance) || 0;          // Bs por USDT (Binance compra)
-    const binSell = Number(d.binance_compra) || 0;   // Bs por USDT (Binance venta)
-    const bcv     = Number(d.bcv) || 0;
-    const cny     = getCnyRate();
-    set('sim-rate-bin-buy',  binBuy  > 0 ? moneyFmt.format(binBuy)  : '--');
-    set('sim-rate-bin-sell', binSell > 0 ? moneyFmt.format(binSell) : '--');
-    set('sim-rate-bcv',      bcv     > 0 ? moneyFmt.format(bcv)     : '--');
-    set('sim-rate-cny',      moneyFmt.format(cny));
+    const usdt = getUsdtRate();          // Bs por USDT (precio de compra)
+    const bcv  = Number(d.bcv) || 0;
+    const cny  = getCnyRate();
+    set('sim-rate-bin-buy', usdt > 0 ? moneyFmt.format(usdt) : '--');
+    set('sim-rate-bcv',     bcv  > 0 ? moneyFmt.format(bcv)  : '--');
+    set('sim-rate-cny',     moneyFmt.format(cny));
 
     const { cost: cb } = simulationCostContext();
-    const binr = binSell || binBuy;
     set('sim-base-type', simType === 'unidad' ? 'por unidad' : 'por caja');
     set('sim-base-usd', usdFmt.format(cb));
-    set('sim-base-bs', binr > 0 ? 'Bs ' + moneyFmt.format(cb * binr) : 'Bs --');
+    set('sim-base-cross', crossCurrencies(cb));
     const status = document.getElementById('sim-rate-status');
     if (status) {
         const freshness = ratesDisplayMeta.stale ? ' · datos desactualizados' : '';
-        const fallback = ratesDisplayMeta.cnyFallback ? ' · CNY estimado' : '';
-        status.textContent = `Tasa P2P usada: ${binr > 0 ? moneyFmt.format(binr) : 'no disponible'} · ${ratesDisplayMeta.lastUpdate || 'sin hora'}${freshness}${fallback}`;
-        status.classList.toggle('is-stale', ratesDisplayMeta.stale || binr <= 0);
+        const fallback = ratesDisplayMeta.cnyFallback ? ' · yuan estimado' : '';
+        status.textContent = `USDT tomado del precio de compra: ${usdt > 0 ? moneyFmt.format(usdt) : 'no disponible'} Bs · ${ratesDisplayMeta.lastUpdate || 'sin hora'}${freshness}${fallback}`;
+        status.classList.toggle('is-stale', ratesDisplayMeta.stale || usdt <= 0);
     }
 }
 
@@ -1771,27 +2141,21 @@ function calcGanancia() {
     const context = simulationCostContext();
     const cb = context.cost;
 
-    const br   = d.bcv || 0;
-    const binr = d.binance_compra || d.binance || 0;
-    const tbd  = (u) => (br > 0 && binr > 0) ? (u * binr) / br : 0;
-    // Cruz informativa: bolívares reales (a tasa P2P) + equivalente en dólar BCV.
-    const crossOf = (u) => {
-        const bs = binr > 0 ? 'Bs ' + moneyFmt.format(u * binr) : 'Bs --';
-        return (br > 0 && binr > 0) ? `${bs} · ${usdFmt.format(tbd(u))} BCV` : bs;
-    };
+    const binr = getUsdtRate();
+    const crossOf = crossCurrencies;
     const isMargin = (simMode === 'pct');
 
     // Punto de equilibrio = costo base (precio donde la ganancia es $0)
     if (beEl)  beEl.innerText  = usdFmt.format(cb);
-    if (beBcv) beBcv.innerText = cb > 0 ? crossOf(cb) : 'Bs 0,00 · $0.00 BCV';
+    if (beBcv) beBcv.innerText = cb > 0 ? crossOf(cb) : '$0.00 BCV · ¥0,00';
 
     const resetAll = () => {
         r1.innerText = '$0.00'; r1.className = 'c-sim-result-row__val text-slate-400 font-bold text-sm block';
-        r1c.innerText = 'Bs 0,00 · $0.00 BCV';
+        r1c.innerText = '$0.00 BCV · ¥0,00';
         r2.innerText = isMargin ? '$0.00' : '0.00%';
         r2.className = 'c-sim-result-row__val text-slate-400 font-bold text-sm block';
         if (precioUsd) precioUsd.innerText = '$0.00';
-        if (precioBcv) precioBcv.innerText = 'Bs 0,00 · $0.00 BCV';
+        if (precioBcv) precioBcv.innerText = '$0.00 BCV · ¥0,00';
         if (rowU) rowU.style.display = 'none';
         if (rowRec) rowRec.style.display = 'none';
         if (margenEl) { margenEl.innerText = '0.00%'; margenEl.className = 'c-sim-result-row__val text-slate-400 font-bold text-sm'; }
@@ -1803,8 +2167,9 @@ function calcGanancia() {
     const simulation = window.DayzoSaleCalculations?.calculateSaleSimulation({
         costUsd: cb,
         inputValue: val,
-        mode: simMode === 'precio' ? 'priceUsd' : simMode === 'bs' ? 'priceVes' : 'roi',
+        mode: simMode === 'precio' ? 'priceUsd' : simMode === 'cny' ? 'priceCny' : 'roi',
         vesPerUsd: binr,
+        cnyPerUsd: getCnyRate(),
         count: context.totalCount,
     });
     if (!simulation?.ok) { resetAll(); return; }
@@ -1966,13 +2331,6 @@ function applySalePlanToQuote(quote, plan) {
     return q;
 }
 
-/** Recalcula el plan sobre nuevos costos preservando el precio de venta por unidad. */
-function reprojectSalePlan(quote) {
-    const venta = Number(quote?.ventaUnitarioUSD);
-    if (!Number.isFinite(venta) || venta <= 0) return quote;
-    return applySalePlanToQuote(quote, buildSalePlanForQuote(quote, venta));
-}
-
 function readProductoLinkInput(inputId, { required = false } = {}) {
     const el = document.getElementById(inputId);
     const raw = (el?.value ?? '').toString().trim();
@@ -1983,14 +2341,6 @@ function readProductoLinkInput(inputId, { required = false } = {}) {
         return false;
     }
     return link;
-}
-
-function productoLinkDetailRowHtml(productoLink) {
-    const safe = normalizeProductoLink(productoLink);
-    if (!safe) return '';
-    const href = escapeHtml(safe);
-    const label = escapeHtml(safe.replace(/^https?:\/\//i, ''));
-    return `<div class="c-quote-detail__row c-quote-detail__row--link"><span>Producto</span><strong><a href="${href}" target="_blank" rel="noopener noreferrer" class="c-producto-link">${label}</a></strong></div>`;
 }
 
 function renderProductoLinkDetalle(productoLink) {
@@ -2083,9 +2433,27 @@ async function cargarCotizacionesImport({ reset = true } = {}) {
         const r = await authFetch('/api/import-quotes?' + params.toString(), {
             signal: importQuotesAbortController?.signal,
         });
-        if (r.status === 401) return;
-        const j = await r.json();
-        if (!r.ok || !j.success) throw new Error(j?.error?.message || j?.message || 'Error cargando cotizaciones');
+        if (r.status === 401) {
+            persistImportDraft();
+            const view = getImportQuoteView();
+            const info = view?.classifyQuotesLoadError(r, { error: { code: 'SESSION_EXPIRED' } }, { isFileProtocol: isFileProtocol() });
+            if (listEl && reset && info) {
+                listEl.innerHTML = `
+                  <div class="c-import-quote-msg c-import-quote-msg--error" role="alert">
+                    <p><strong>${escapeHtml(info.title)}</strong></p>
+                    <p>${escapeHtml(info.message)}</p>
+                    <button type="button" class="c-quote-retry" data-quote-action="reload">Reintentar</button>
+                  </div>`;
+            }
+            return;
+        }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.success) {
+            const view = getImportQuoteView();
+            const info = view?.classifyQuotesLoadError(r, j, { isFileProtocol: isFileProtocol() })
+                || { title: 'No se pudieron cargar las cotizaciones', message: j?.error?.message || j?.message || 'Error' };
+            throw Object.assign(new Error(info.message), { info });
+        }
         const incoming = Array.isArray(j.quotes) ? j.quotes : [];
         importQuotesAll = reset ? incoming : importQuotesAll.concat(incoming);
         importQuotesTotal = Number(j.total) || 0;
@@ -2098,9 +2466,13 @@ async function cargarCotizacionesImport({ reset = true } = {}) {
         if (e?.name === 'AbortError') return;
         console.error(e);
         if (listEl && reset) {
+            const view = getImportQuoteView();
+            const info = e?.info || view?.classifyQuotesLoadError(null, null, { isFileProtocol: isFileProtocol() })
+                || { title: 'No se pudieron cargar las cotizaciones', message: e?.message || 'Error desconocido' };
             listEl.innerHTML = `
-              <div class="c-import-quote-msg c-import-quote-msg--error" role="alert">
-                <p>No se pudieron cargar las cotizaciones.</p>
+              <div class="c-import-quote-msg c-import-quote-msg--error" role="alert" data-error-code="${escapeHtml(info.code || '')}">
+                <p><strong>${escapeHtml(info.title)}</strong></p>
+                <p>${escapeHtml(info.message)}</p>
                 <button type="button" class="c-quote-retry" data-quote-action="reload">Reintentar</button>
               </div>`;
         }
@@ -2115,6 +2487,8 @@ function cargarMasCotizacionesImport() {
 
 function computeImportQuoteDetailLabels(q) {
     if (!q) return null;
+    const br = Number(d.bcv) || 0;
+    const binr = getUsdtRate();
     const dims = q.dimensionesCm || {};
     const l = Number(dims.l), w = Number(dims.w), h = Number(dims.h);
     const dimsTxt = [l, w, h].every(Number.isFinite) ? `${Math.round(l)}×${Math.round(w)}×${Math.round(h)} cm` : '-';
@@ -2129,14 +2503,18 @@ function computeImportQuoteDetailLabels(q) {
         : (Number(q.costoMercanciaUSD) || 0) + (Number(q.envioChinaUSD) || 0)
             + (Number(q.plataformaUSD) || 0) + (Number(q.comisionBancoUSD) || 0);
 
-    // Precio inicial de compra (mercancía por unidad, sin costos de envío ni comisiones)
+    // Precio inicial: snapshot CNY + presentación USDT → BCV → yuanes
+    const snapRate = Number(q.rateSnapshot?.cny) > 0 ? Number(q.rateSnapshot.cny) : getCnyRate();
     const precioInicialUSD = Number(q.precioMercanciaPorUnidadUSD) || 0;
-    const precioInicialCNY = precioInicialUSD > 0 ? precioInicialUSD * getCnyRate() : 0;
-    const br   = d.bcv || 0;
-    const binr = d.binance_compra || d.binance || 0;
-    const precioInicialBCVusd = (precioInicialUSD > 0 && br > 0 && binr > 0)
-        ? (precioInicialUSD * binr) / br
-        : null;
+    let precioInicialCNY = Number(q.precioMercanciaPorUnidadCNY);
+    if (!(precioInicialCNY > 0)) {
+        if (q.purchasePriceOriginalCurrency === 'CNY' && Number(q.purchasePriceOriginalAmount) > 0) {
+            precioInicialCNY = Number(q.purchasePriceOriginalAmount);
+        } else {
+            precioInicialCNY = precioInicialUSD > 0 ? precioInicialUSD * snapRate : 0;
+        }
+    }
+    const inicialFmt = formatCostoUnitarioCurrencies(precioInicialUSD, snapRate);
 
     // Plan de venta guardado (proyección de ganancia)
     const tbd = (u) => (br > 0 && binr > 0) ? (u * binr) / br : 0;
@@ -2176,13 +2554,21 @@ function computeImportQuoteDetailLabels(q) {
         total: usd(q.inversionTotalUSD),
         unitario: formatCostoUnitarioCurrencies(q.costoUnitarioUSD),
         caja: usd(q.costoPorCajaUSD),
-        // Precio inicial de compra por unidad
+        // Mismas tres monedas que el costo unitario: antes «por caja» e
+        // «inversión total» se quedaban solo en dólares.
+        cajaCross: crossCurrencies(q.costoPorCajaUSD),
+        totalCross: crossCurrencies(q.inversionTotalUSD),
+        // Qué tasa usa cada bloque: el precio de compra queda congelado con la
+        // tasa del día en que se cotizó; los equivalentes del costo final son de
+        // hoy. Sin decirlo, dos yuanes distintos en el mismo panel confunden.
+        rateNote: (Math.abs(snapRate - getCnyRate()) > 0.0001
+            ? `Compra congelada a ${moneyFmt.format(snapRate)} ¥/$ · equivalentes de hoy a ${moneyFmt.format(getCnyRate())} ¥/$`
+            : `Equivalentes con ${moneyFmt.format(getCnyRate())} ¥/$ y USDT compra Bs ${binr > 0 ? moneyFmt.format(binr) : '--'}`),
+        // Precio inicial: USDT → USD BCV → yuanes
         showPrecioInicial: precioInicialUSD > 0,
-        precioInicialUSD: usdFmt.format(precioInicialUSD),
-        precioInicialCNY: precioInicialCNY > 0 ? '¥' + moneyFmt.format(precioInicialCNY) : '¥0.00',
-        precioInicialBCV: precioInicialBCVusd != null
-            ? usdFmt.format(precioInicialBCVusd) + ' (BCV)'
-            : '-- (BCV)',
+        precioInicialUSD: inicialFmt.usdt,
+        precioInicialBCV: inicialFmt.bcv,
+        precioInicialCNY: inicialFmt.cny,
     };
 }
 
@@ -2238,6 +2624,7 @@ function renderImportQuotesList() {
             : '<p class="c-import-quote-msg">Aún no tienes cotizaciones. Guarda la primera desde el cálculo actual.</p>';
         return;
     }
+    // El listado es compacto; la tarjeta completa se monta solo al abrir el detalle.
     listEl.innerHTML = importQuotesAll.map(buildImportQuoteCardHTML).join('');
     if (importExpandedQuoteId) {
         const cached = importQuoteDetailCache.get(importExpandedQuoteId);
@@ -2255,12 +2642,12 @@ function renderImportQuotesList() {
 }
 
 /**
- * Tarjeta informativa de cotización (sin clic para expandir).
+ * Tarjeta informativa completa, usada dentro del detalle expandido.
  * Orden: precio/costo unitario (arriba) → KPIs → desglose → totales →
  * link del producto → proyección de venta → acciones.
  */
-function buildImportQuoteCardHTMLLegacy(item) {
-    const q = (item && item.quote) ? item.quote : {};
+function buildImportQuoteCardHTMLLegacy(item, { embedded = false } = {}) {
+    const q = (item && item.quote) ? item.quote : (item || {});
     const idAttr = escapeHtml(item?.id ?? '');
     const idJson = JSON.stringify(String(item?.id ?? ''));
     const name = escapeHtml(item?.name || 'Sin nombre');
@@ -2271,11 +2658,11 @@ function buildImportQuoteCardHTMLLegacy(item) {
 
     const lbl = computeImportQuoteDetailLabels(q);
     if (!lbl) {
-        return `<div class="c-quote-card" data-quote-id="${idAttr}">
+        return `<div class="c-quote-card${embedded ? ' c-quote-card--expanded' : ''}" data-quote-id="${idAttr}">
           <div class="c-quote-card__head"><div class="c-quote-card__titlewrap"><h4 class="c-quote-card__name">${name}</h4></div></div>
           <p class="c-import-quote-msg">Sin datos para esta cotización.</p>
           <div class="c-quote-card__actions">
-            <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-legacy-action="delete"><i class="fas fa-trash"></i> Eliminar</button>
+            <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-quote-action="delete" data-quote-id="${idAttr}"><i class="fas fa-trash"></i> Eliminar</button>
           </div>
         </div>`;
     }
@@ -2304,6 +2691,11 @@ function buildImportQuoteCardHTMLLegacy(item) {
         linkRow = `<a class="c-quote-card__link" href="${href}" target="_blank" rel="noopener noreferrer"><i class="fas fa-link" aria-hidden="true"></i><span>${label}</span></a>`;
     }
 
+    const portada = validProductPhoto(q.productoFotoPortada) ? q.productoFotoPortada : (Array.isArray(q.productoFotos) ? q.productoFotos[0] : null);
+    const photoRow = validProductPhoto(portada)
+        ? `<div class="c-quote-card__product-photo"><img src="${escapeHtml(portada)}" alt="Foto de ${name}" loading="lazy"><span>${Number(q.productoFotosCount || q.productoFotos?.length || 1)} foto${Number(q.productoFotosCount || q.productoFotos?.length || 1) === 1 ? '' : 's'} guardada${Number(q.productoFotosCount || q.productoFotos?.length || 1) === 1 ? '' : 's'}</span></div>`
+        : '';
+
     const planBlock = lbl.showPlan
         ? `<div class="c-quote-plan">
              <div class="c-quote-plan__head"><i class="fas fa-arrow-trend-up" aria-hidden="true"></i><span>Proyección de venta</span></div>
@@ -2328,7 +2720,7 @@ function buildImportQuoteCardHTMLLegacy(item) {
         : '';
 
     return `
-    <div class="c-quote-card" data-quote-id="${idAttr}">
+    <div class="c-quote-card${embedded ? ' c-quote-card--expanded' : ''}" data-quote-id="${idAttr}">
       <div class="c-quote-card__head">
         <div class="c-quote-card__titlewrap">
           <h4 class="c-quote-card__name">${name}</h4>
@@ -2349,12 +2741,14 @@ function buildImportQuoteCardHTMLLegacy(item) {
         ${precioCompraAside}
       </div>
 
+      <p class="c-quote-rate-note">${escapeHtml(lbl.rateNote)}</p>
+
       <div class="c-quote-kpis">
         <div class="c-quote-kpi"><span class="c-quote-kpi__label">Dimensiones</span><span class="c-quote-kpi__val">${lbl.dimsTxt}</span></div>
         <div class="c-quote-kpi"><span class="c-quote-kpi__label">Unidades</span><span class="c-quote-kpi__val">${lbl.unitsTxt}</span></div>
         <div class="c-quote-kpi"><span class="c-quote-kpi__label">Volumen</span><span class="c-quote-kpi__val">${lbl.vol}</span></div>
         <div class="c-quote-kpi"><span class="c-quote-kpi__label">Peso</span><span class="c-quote-kpi__val">${lbl.peso}</span></div>
-        <div class="c-quote-kpi"><span class="c-quote-kpi__label">Costo por caja</span><span class="c-quote-kpi__val">${lbl.caja}</span></div>
+        <div class="c-quote-kpi"><span class="c-quote-kpi__label">Costo por caja</span><span class="c-quote-kpi__val">${lbl.caja}</span><span class="c-quote-kpi__cross">${lbl.cajaCross}</span></div>
         <div class="c-quote-kpi"><span class="c-quote-kpi__label">Tipo cobro</span><span class="c-quote-kpi__val">${escapeHtml(lbl.tipo)}</span></div>
       </div>
 
@@ -2371,15 +2765,18 @@ function buildImportQuoteCardHTMLLegacy(item) {
       <div class="c-quote-totals">
         <span class="c-quote-totals__label">Inversión total</span>
         <span class="c-quote-totals__val">${lbl.total}</span>
+        <span class="c-quote-totals__cross">${lbl.totalCross}</span>
       </div>
 
+      ${photoRow}
       ${linkRow}
       ${planBlock}
 
       <div class="c-quote-card__actions">
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--edit c-auth-only" data-legacy-action="edit"><i class="fas fa-pen"></i> Editar</button>
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--img" data-legacy-action="image"><i class="fas fa-image"></i> Imagen</button>
-        <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-legacy-action="delete"><i class="fas fa-trash"></i> Eliminar</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--simulate" data-quote-action="simulate" data-quote-id="${idAttr}"><i class="fas fa-chart-line"></i> Simular</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--edit c-auth-only" data-quote-action="edit" data-quote-id="${idAttr}"><i class="fas fa-pen"></i> Editar</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--img" data-quote-action="image" data-quote-id="${idAttr}"><i class="fas fa-image"></i> Imagen</button>
+        <button type="button" class="c-quote-card__btn c-quote-card__btn--del c-auth-only" data-quote-action="delete" data-quote-id="${idAttr}"><i class="fas fa-trash"></i> Eliminar</button>
       </div>
     </div>`;
 }
@@ -2404,7 +2801,7 @@ function buildImportQuoteCardHTML(item) {
     const detailId = importQuoteDetailRegionId(id);
     const expanded = importExpandedQuoteId === id;
     return `
-      <article class="c-quote-card c-quote-card--compact" data-quote-id="${safeId}">
+      <article class="c-quote-card c-quote-card--compact${expanded ? ' is-expanded' : ''}" data-quote-id="${safeId}">
         <div class="c-quote-compact__main">
           <div class="c-quote-card__titlewrap">
             <h4 class="c-quote-card__name">${name}</h4>
@@ -2443,42 +2840,7 @@ function buildImportQuoteCardHTML(item) {
 }
 
 function buildImportQuoteLazyDetailHTML(record) {
-    const quote = record?.quote || {};
-    const labels = computeImportQuoteDetailLabels(quote);
-    if (!labels) return '<p class="c-import-quote-msg">La cotización no contiene un detalle válido.</p>';
-    const product = productoLinkDetailRowHtml(quote.productoLink);
-    const plan = labels.showPlan
-        ? `<section class="c-quote-lazy-detail__section">
-             <h5>Plan de venta</h5>
-             <div class="c-quote-lazy-detail__grid">
-               <div><span>Precio/un.</span><strong>${labels.ventaUnitUSD}</strong></div>
-               <div><span>Ganancia/un.</span><strong>${labels.ganUnitUSD}</strong></div>
-               <div><span>Ganancia total</span><strong>${labels.ganTotalUSD}</strong></div>
-               <div><span>Rentabilidad</span><strong>${escapeHtml(labels.ganTotalSub)}</strong></div>
-             </div>
-           </section>`
-        : '';
-    return `
-      <section class="c-quote-lazy-detail__section">
-        <h5>Resumen</h5>
-        <div class="c-quote-lazy-detail__grid">
-          <div><span>Dimensiones</span><strong>${labels.dimsTxt}</strong></div>
-          <div><span>Unidades</span><strong>${labels.unitsTxt}</strong></div>
-          <div><span>Costo por caja</span><strong>${labels.caja}</strong></div>
-          <div><span>Volumen · peso</span><strong>${labels.vol} · ${labels.peso}</strong></div>
-        </div>
-      </section>
-      <details class="c-quote-lazy-detail__section">
-        <summary>Ver costos y logística</summary>
-        <div class="c-quote-line"><span class="c-quote-line__label">Mercancía</span><span class="c-quote-line__val">${labels.merc}</span></div>
-        ${labels.showEnvioChina ? `<div class="c-quote-line"><span class="c-quote-line__label">Envío China</span><span class="c-quote-line__val">${labels.envioChina}</span></div>` : ''}
-        <div class="c-quote-line"><span class="c-quote-line__label">Plataforma</span><span class="c-quote-line__val">${labels.plat}</span></div>
-        <div class="c-quote-line"><span class="c-quote-line__label">Banco</span><span class="c-quote-line__val">${labels.banco}</span></div>
-        <div class="c-quote-line"><span class="c-quote-line__label">Envío internacional</span><span class="c-quote-line__val">${labels.flete}</span></div>
-        <div class="c-quote-totals"><span class="c-quote-totals__label">Inversión total</span><span class="c-quote-totals__val">${labels.total}</span></div>
-      </details>
-      ${product}
-      ${plan}`;
+    return buildImportQuoteCardHTMLLegacy(record, { embedded: true });
 }
 
 async function fetchImportQuoteDetail(id, { force = false } = {}) {
@@ -2497,7 +2859,9 @@ function collapseImportQuoteDetail(id) {
     const sid = String(id || '');
     const region = document.getElementById(importQuoteDetailRegionId(sid));
     const button = document.querySelector(`[data-quote-action="toggle"][data-quote-id="${CSS.escape(sid)}"]`);
+    const card = button?.closest('.c-quote-card--compact');
     if (region) region.hidden = true;
+    card?.classList.remove('is-expanded');
     if (button) {
         button.setAttribute('aria-expanded', 'false');
         const label = button.querySelector('span');
@@ -2517,6 +2881,7 @@ async function toggleImportQuoteDetail(id) {
     const region = document.getElementById(importQuoteDetailRegionId(sid));
     const button = document.querySelector(`[data-quote-action="toggle"][data-quote-id="${CSS.escape(sid)}"]`);
     if (!region || !button) return;
+    button.closest('.c-quote-card--compact')?.classList.add('is-expanded');
     region.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     const label = button.querySelector('span');
@@ -2678,13 +3043,33 @@ function setupStaticInteractions() {
     bind('btn-close-import-detail', 'click', cerrarDetalleCotizacionImport);
     bind('import-btn-edit', 'click', editarCotizacionImport);
     bind('import-btn-delete', 'click', () => eliminarCotizacionImport());
-    bind('import-quote-edit-sale-price', 'input', onEmpresaEdicionChange);
+    ['import-quote-edit-sale-price', 'import-quote-edit-product-link', 'import-quote-edit-dim-l', 'import-quote-edit-dim-w',
+        'import-quote-edit-dim-h', 'import-quote-edit-weight', 'import-quote-edit-units', 'import-quote-edit-boxes',
+        'import-quote-edit-purchase-price', 'import-quote-edit-china-shipping', 'import-quote-edit-fee-platform',
+        'import-quote-edit-fee-bank'].forEach((id) => bind(id, 'input', onEmpresaEdicionChange));
+    bind('import-quote-edit-purchase-currency', 'change', onEmpresaEdicionChange);
     bind('import-quote-edit-company', 'change', onEmpresaEdicionChange);
     bind('import-quote-edit-custom-rate', 'input', onEmpresaEdicionChange);
+    bind('import-quote-product-photos', 'change', (event) => addProductPhotosFromInput(event, importNewQuotePhotos));
+    bind('import-quote-edit-photos', 'change', (event) => addProductPhotosFromInput(event, importEditPhotos));
     bind('btn-update-import-quote', 'click', actualizarCotizacionImport);
     bind('btn-cancel-import-edit', 'click', cancelarEdicionCotizacionImport);
 
     document.addEventListener('click', (event) => {
+        const photoRemove = event.target.closest('[data-product-photo-remove]');
+        if (photoRemove) {
+            const index = Number(photoRemove.dataset.productPhotoRemove);
+            const containerId = photoRemove.closest('.c-quote-photos')?.id;
+            const target = containerId === 'import-quote-edit-photos-preview' ? importEditPhotos : importNewQuotePhotos;
+            if (Number.isInteger(index) && index >= 0) target.splice(index, 1);
+            if (target === importEditPhotos) {
+                renderProductPhotoPreview('import-quote-edit-photos-preview', importEditPhotos, { editable: true });
+                recalcularCotizacionEditada();
+            } else {
+                renderProductPhotoPreview('import-quote-product-photos-preview', importNewQuotePhotos, { editable: true });
+            }
+            return;
+        }
         const target = event.target.closest('[data-app-action]');
         if (!target) return;
         if (target.dataset.appAction === 'logout') doLogout();
@@ -2737,6 +3122,13 @@ function setupImportQuoteInteractions() {
         else if (action === 'image') await exportQuoteImage(id);
         else if (action === 'delete') await eliminarCotizacionImport(id);
         else if (action === 'reload') await cargarCotizacionesImport();
+        else if (action === 'toggle-rate-mode') {
+            const current = importQuoteRateMode.get(String(id)) || 'historical';
+            importQuoteRateMode.set(String(id), current === 'live' ? 'historical' : 'live');
+            const cached = importQuoteDetailCache.get(String(id));
+            const region = document.getElementById(importQuoteDetailRegionId(id));
+            if (cached && region) region.innerHTML = buildImportQuoteLazyDetailHTML(cached);
+        }
     });
     search?.addEventListener('input', () => {
         clearTimeout(importQuotesSearchTimer);
@@ -2746,6 +3138,14 @@ function setupImportQuoteInteractions() {
         control?.addEventListener('change', () => cargarCotizacionesImport());
     });
     more?.addEventListener('click', cargarMasCotizacionesImport);
+
+    document.getElementById('btn-currency-cny')?.addEventListener('click', () => setPurchaseCurrency('CNY'));
+    document.getElementById('btn-currency-usd')?.addEventListener('click', () => setPurchaseCurrency('USD'));
+    document.getElementById('g-precio')?.addEventListener('input', () => {
+        updatePurchasePriceEquivalence();
+        persistImportDraft();
+    });
+    syncPurchaseCurrencyUI();
 }
 
 async function guardarCotizacionImport() {
@@ -2761,6 +3161,7 @@ async function guardarCotizacionImport() {
         const empresa  = lastImportQuote.empresaNombre || empresaNombrePorTarifaUSD(lastImportQuote.empresaTarifaUSD);
         const fullName = nameBase.toLowerCase().includes(empresa.toLowerCase()) ? nameBase : `${nameBase} - ${empresa}`;
         let quoteToSave = applyProductoLinkToQuote(lastImportQuote, productoLink);
+        quoteToSave.productoFotos = importNewQuotePhotos.slice();
         // Plan de venta: usa el precio indicado o, si está vacío, el del simulador.
         const salePriceEl = document.getElementById('import-quote-sale-price');
         let salePriceUnit = parseLocaleAmount(salePriceEl?.value);
@@ -2774,10 +3175,18 @@ async function guardarCotizacionImport() {
         });
         if (r.status === 401) return;
         const j = await r.json();
-        if (!r.ok || !j.success) { showToast(j?.message || 'Error al guardar.', 'error'); return; }
+        if (!r.ok || !j.success) {
+            const code = j?.error?.code || '';
+            showToast(j?.error?.message || j?.message || 'Error al guardar.', 'error');
+            if (code === 'CSRF_INVALID') showToast('Token de seguridad inválido. Recarga la página.', 'warning');
+            return;
+        }
         if (nameEl) nameEl.value = '';
         if (linkEl) linkEl.value = '';
         if (salePriceEl) salePriceEl.value = '';
+        importNewQuotePhotos = [];
+        renderProductPhotoPreview('import-quote-product-photos-preview', importNewQuotePhotos, { editable: true });
+        clearImportDraft();
         await cargarCotizacionesImport();
         showToast('Cotización guardada', 'success');
     } catch (e) { console.error(e); showToast('Error guardando cotización.', 'error'); }
@@ -2819,6 +3228,7 @@ function renderDetalleCotizacionImport(q, title) {
     document.getElementById('import-q-unidades').innerText     = lbl.unitsTxt;
     document.getElementById('import-q-costo-unidad').innerText = lbl.costoUnidad;
     renderProductoLinkDetalle(q.productoLink);
+    renderProductPhotosDetail(q.productoFotos);
     document.getElementById('import-q-vol').innerText  = lbl.vol;
     document.getElementById('import-q-peso').innerText = lbl.peso;
     document.getElementById('import-q-tipo').innerText = lbl.tipo;
@@ -2837,12 +3247,21 @@ function renderDetalleCotizacionImport(q, title) {
     document.getElementById('import-q-subtotal').innerText = lbl.subtotal;
     document.getElementById('import-q-flete').innerText  = lbl.flete;
     document.getElementById('import-q-total').innerText  = lbl.total;
-    document.getElementById('import-q-unitario').innerText = lbl.unitario.usd;
+    const qTotalCross = document.getElementById('import-q-total-cross');
+    if (qTotalCross) qTotalCross.innerText = lbl.totalCross;
+    document.getElementById('import-q-unitario').innerText = lbl.unitario.usdt || lbl.unitario.usd;
     const qUnitBcv = document.getElementById('import-q-unitario-bcv');
     const qUnitCny = document.getElementById('import-q-unitario-cny');
     if (qUnitBcv) qUnitBcv.innerText = lbl.unitario.bcv;
     if (qUnitCny) qUnitCny.innerText = lbl.unitario.cny;
     document.getElementById('import-q-caja').innerText     = lbl.caja;
+    const qCajaBcv = document.getElementById('import-q-caja-bcv');
+    const qCajaCny = document.getElementById('import-q-caja-cny');
+    const cajaFmt = formatCostoUnitarioCurrencies(Number(q.costoPorCajaUSD) || 0);
+    if (qCajaBcv) qCajaBcv.innerText = cajaFmt.bcv;
+    if (qCajaCny) qCajaCny.innerText = cajaFmt.cny;
+    const qRateNote = document.getElementById('import-q-rate-note');
+    if (qRateNote) qRateNote.innerText = lbl.rateNote;
 
     // Precio inicial de compra por unidad
     const rowPrecioInicial = document.getElementById('import-row-precio-inicial');
@@ -2851,7 +3270,7 @@ function renderDetalleCotizacionImport(q, title) {
     const elPrecioInicialCNY = document.getElementById('import-q-precio-inicial-cny');
     if (rowPrecioInicial) rowPrecioInicial.style.display = lbl.showPrecioInicial ? '' : 'none';
     if (elPrecioInicialUSD) elPrecioInicialUSD.innerText = lbl.precioInicialUSD || '$0.00';
-    if (elPrecioInicialBCV) elPrecioInicialBCV.innerText = lbl.precioInicialBCV || '-- (BCV)';
+    if (elPrecioInicialBCV) elPrecioInicialBCV.innerText = lbl.precioInicialBCV || '-- BCV';
     if (elPrecioInicialCNY) elPrecioInicialCNY.innerText = lbl.precioInicialCNY || '¥0.00';
 
     // Proyección de venta (plan guardado)
@@ -2885,76 +3304,283 @@ function cerrarDetalleCotizacionImport() {
 }
 
 // ═══════════════════════════════════════════════
-// reconstruirEntradaRawDesdeQuote — FIX #5
-// Bug original: usaba variable `precio` no definida, debería ser `precioCNY`
 // ═══════════════════════════════════════════════
+/**
+ * Reconstruye la línea corta de una cotización guardada (para reeditarla).
+ * Conserva la moneda original del precio y del envío China.
+ */
 function reconstruirEntradaRawDesdeQuote(q) {
     if (!q) return '';
     if (q.entradaRaw) return q.entradaRaw;
 
-    const dims  = q.dimensionesCm || {};
-    const l     = Number(dims.l), w = Number(dims.w), h = Number(dims.h);
-    const peso  = Number(q.pesoPorCajaKg);
+    const dims = q.dimensionesCm || {};
+    const l = Number(dims.l), w = Number(dims.w), h = Number(dims.h);
+    const peso = Number(q.pesoPorCajaKg);
     const unidades = Number(q.unidadesPorCaja);
-    const precioUSD = Number(q.precioMercanciaPorUnidadUSD || 0);
-    const precioCNY = precioUSD * getCnyRate();
+    const currency = (q.purchasePriceOriginalCurrency || q.purchasePrice?.currency || 'USD').toUpperCase();
+    const snapRate = Number(q.rateSnapshot?.cny) > 0 ? Number(q.rateSnapshot.cny) : getCnyRate();
+    let amount = Number(q.purchasePriceOriginalAmount ?? q.purchasePrice?.amount);
+    if (!(amount > 0)) {
+        const usd = Number(q.precioMercanciaPorUnidadUSD || 0);
+        amount = currency === 'CNY' ? usd * snapRate : usd;
+    }
     const cajas = Number(q.cajas || 1);
-    const envioChinaPorCaja = Number.isFinite(Number(q.envioChinaPorCajaUSD))
-        ? Number(q.envioChinaPorCajaUSD)
-        : (Number.isFinite(Number(q.envioChinaUSD)) && cajas > 0)
-            ? Number(q.envioChinaUSD) / cajas : 0;
+    const envioGuardado = q.envioChinaPrice;
+    const envioChinaPorCaja = Number(envioGuardado?.amount) >= 0 && envioGuardado?.currency
+        ? Number(envioGuardado.amount)
+        : Number.isFinite(Number(q.envioChinaPorCajaUSD))
+            ? Number(q.envioChinaPorCajaUSD)
+            : (Number.isFinite(Number(q.envioChinaUSD)) && cajas > 0)
+                ? Number(q.envioChinaUSD) / cajas : 0;
+    const envioCurrency = (envioGuardado?.currency || 'USD').toUpperCase();
 
-    // Validate all required values  ← FIX #5: was checking `precio` instead of `precioCNY`
-    if (![l, w, h, peso, unidades, precioCNY].every(n => Number.isFinite(n) && !isNaN(n))) return '';
+    if (![l, w, h, peso, unidades, amount].every((n) => Number.isFinite(n) && !Number.isNaN(n))) return '';
 
     const toStr = (x) => {
         if (!Number.isFinite(x)) return '0';
         return Number.isInteger(x) ? String(x) : x.toFixed(2).replace('.', ',');
     };
-
-    let result = `${Math.round(l)}x${Math.round(w)}x${Math.round(h)} ${toStr(peso)} ${Math.round(unidades)} ${toStr(precioCNY)}`;
-    if (envioChinaPorCaja > 0 || cajas > 1) result += ` ${toStr(envioChinaPorCaja)}`;
+    const suffix = currency === 'CNY' ? 'cny' : 'usdt';
+    const envioSuffix = envioCurrency === 'CNY' ? 'cny' : 'usdt';
+    let result = `${Math.round(l)}x${Math.round(w)}x${Math.round(h)} ${toStr(peso)} ${Math.round(unidades)} ${toStr(amount)}${suffix}`;
+    if (envioChinaPorCaja > 0 || cajas > 1) result += ` ${toStr(envioChinaPorCaja)}${envioSuffix}`;
     if (cajas > 1) result += ` ${Math.round(cajas)}`;
     return result;
 }
 
-function computeImportQuoteFromRaw(entradaRaw, tarifaBaseUSD, empresaNombre) {
-    if (!entradaRaw) return null;
-    const clean = entradaRaw.replace(/[/\\*]/g, 'x').toLowerCase();
-    const p = clean.split(/\s+/);
-    if (p.length < 4) return null;
-    const dims = p[0].split('x');
-    if (dims.length !== 3) return null;
-    const l = parseLocaleAmount(dims[0]), w = parseLocaleAmount(dims[1]), h = parseLocaleAmount(dims[2]);
-    const pbc  = parseLocaleAmount(p[1]), ubc = parseInt(p[2], 10);
-    const pu   = parseLocaleAmount(p[3]) / getCnyRate();
-    const ecbc = p.length >= 5 ? parseLocaleAmount(p[4]) : 0;
-    const nc   = p.length >= 6 ? parseInt(p[5], 10) : 1;
-    if ([l,w,h,pbc,ubc,pu].some(n => isNaN(n))) return null;
-
+function computeImportQuoteFromRaw(entradaRaw, tarifaBaseUSD, empresaNombre, options = {}) {
+    const parser = getImportParser();
+    if (!entradaRaw || !parser) return null;
+    const defaultCurrency = options.purchaseCurrency || purchaseCurrency;
+    const parsed = parser.parseQuickImportLine(entradaRaw, { defaultCurrency });
+    if (!parsed.ok) return null;
+    const rate = getCnyRate();
+    const pu = parser.purchaseToUsd(parsed.value.purchasePrice, rate);
+    if (!(pu > 0)) return null;
+    const { l, w, h } = parsed.value.dimensionesCm;
+    const pbc = parsed.value.pesoPorCajaKg;
+    const ubc = parsed.value.unidadesPorCaja;
+    const ecbc = parsed.value.envioChinaPrice
+        ? (parser.purchaseToUsd(parsed.value.envioChinaPrice, rate) || 0)
+        : (parsed.value.envioChinaPorCajaUSD || 0);
+    const nc = parsed.value.cajas || 1;
     const tarBase = Number(tarifaBaseUSD) || 0;
     const envio = computeImportShipping(l, w, h, nc, pbc, tarBase);
-    const vTot = envio.volumenM3;
-    const pTot = envio.pesoKg;
-    const cEnv = envio.fleteUSD;
-    const tCob = envio.tipoCobro;
-
-    const tU = ubc * nc, tM = tU * pu, tEC = ecbc * nc, bC = tM + tEC;
-    const fP = bC * feePlataforma, fB = bC * feeBanco;
+    const tU = ubc * nc;
+    const tM = tU * pu;
+    const tEC = ecbc * nc;
+    const bC = tM + tEC;
+    const platformFee = Number.isFinite(Number(options.feePlataforma)) ? Number(options.feePlataforma) : feePlataforma;
+    const bankFee = Number.isFinite(Number(options.feeBanco)) ? Number(options.feeBanco) : feeBanco;
+    const fP = bC * platformFee;
+    const fB = bC * bankFee;
     const sT = tM + tEC + fP + fB;
-    const iT = tM + tEC + fP + fB + cEnv;
+    const iT = tM + tEC + fP + fB + envio.fleteUSD;
+    const cnyUnit = parsed.value.purchasePrice.currency === 'CNY'
+        ? parsed.value.purchasePrice.amount
+        : pu * rate;
 
     return {
-        version: 1, entradaRaw, empresaNombre, empresaTarifaUSD: tarifaBaseUSD, empresaEnvioUSD: tarifaBaseUSD,
-        cajas: nc, unidadesPorCaja: ubc, unidadesTotales: tU,
-        dimensionesCm: { l, w, h }, pesoPorCajaKg: pbc, precioMercanciaPorUnidadUSD: pu, envioChinaPorCajaUSD: ecbc,
-        volumenM3: vTot, volumenPorCajaM3: envio.volumenPorCajaM3, pesoKg: pTot, tipoCobro: tCob,
-        costoMercanciaUSD: tM, envioChinaUSD: tEC, plataformaUSD: fP, comisionBancoUSD: fB,
-        subtotalUSD: sT, envioInternacionalUSD: cEnv, fletePorCajaUSD: envio.fletePorCajaUSD,
-        tarifaMinAplicada: envio.tarifaMinAplicada, inversionTotalUSD: iT,
-        costoUnitarioUSD: iT / tU, costoPorCajaUSD: iT / nc,
-        feePlataforma, feeBanco
+        version: 3,
+        calculationVersion: 'dayzo-import-v3',
+        entradaRaw,
+        empresaNombre,
+        empresaTarifaUSD: tarifaBaseUSD,
+        empresaEnvioUSD: tarifaBaseUSD,
+        cajas: nc,
+        unidadesPorCaja: ubc,
+        unidadesTotales: tU,
+        dimensionesCm: { l, w, h },
+        pesoPorCajaKg: pbc,
+        purchasePrice: { ...parsed.value.purchasePrice },
+        purchasePriceOriginalAmount: parsed.value.purchasePrice.amount,
+        purchasePriceOriginalCurrency: parsed.value.purchasePrice.currency,
+        precioMercanciaPorUnidadUSD: pu,
+        precioMercanciaPorUnidadCNY: cnyUnit,
+        envioChinaPorCajaUSD: ecbc,
+        envioChinaPrice: parsed.value.envioChinaPrice
+            ? { ...parsed.value.envioChinaPrice }
+            : { amount: ecbc, currency: 'USD' },
+        volumenM3: envio.volumenM3,
+        volumenPorCajaM3: envio.volumenPorCajaM3,
+        pesoKg: envio.pesoKg,
+        tipoCobro: envio.tipoCobro,
+        costoMercanciaUSD: tM,
+        envioChinaUSD: tEC,
+        plataformaUSD: fP,
+        comisionBancoUSD: fB,
+        subtotalUSD: sT,
+        envioInternacionalUSD: envio.fleteUSD,
+        fletePorCajaUSD: envio.fletePorCajaUSD,
+        tarifaMinAplicada: envio.tarifaMinAplicada,
+        inversionTotalUSD: iT,
+        costoUnitarioUSD: iT / tU,
+        costoPorCajaUSD: iT / nc,
+        feePlataforma: platformFee,
+        feeBanco: bankFee,
     };
+}
+
+function editInputNumber(id, fallback = null) {
+    const value = parseLocaleAmount(document.getElementById(id)?.value);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+function editInputInteger(id, fallback = null) {
+    const value = editInputNumber(id, fallback);
+    return Number.isFinite(value) ? Math.trunc(value) : fallback;
+}
+
+function formatQuickNumber(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '';
+    return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(6)));
+}
+
+function buildEditedRawFromControls() {
+    const l = editInputNumber('import-quote-edit-dim-l');
+    const w = editInputNumber('import-quote-edit-dim-w');
+    const h = editInputNumber('import-quote-edit-dim-h');
+    const peso = editInputNumber('import-quote-edit-weight');
+    const unidades = editInputInteger('import-quote-edit-units');
+    const cajas = editInputInteger('import-quote-edit-boxes', 1);
+    const price = editInputNumber('import-quote-edit-purchase-price');
+    const shippingChina = editInputNumber('import-quote-edit-china-shipping', 0);
+    const currency = document.getElementById('import-quote-edit-purchase-currency')?.value === 'USD' ? 'usd' : 'cny';
+    if (![l, w, h, peso, unidades, cajas, price].every((n) => Number.isFinite(n) && n > 0)) return '';
+    if (!(shippingChina >= 0)) return '';
+    let raw = `${formatQuickNumber(l)}x${formatQuickNumber(w)}x${formatQuickNumber(h)} ${formatQuickNumber(peso)} ${unidades} ${formatQuickNumber(price)}${currency}`;
+    if (shippingChina > 0 || cajas > 1) raw += ` ${formatQuickNumber(shippingChina)}`;
+    if (cajas > 1) raw += ` ${cajas}`;
+    return raw;
+}
+
+function getEditedCompany() {
+    const selected = document.getElementById('import-quote-edit-company')?.value || 'custom';
+    const customRate = editInputNumber('import-quote-edit-custom-rate', 0);
+    const tariff = selected === 'custom' ? customRate : Number(selected);
+    return {
+        tariff: Number.isFinite(tariff) && tariff > 0 ? tariff : 0,
+        name: selected === 'custom' ? 'Personalizado' : empresaNombrePorTarifaUSD(tariff),
+    };
+}
+
+function getEditedFees() {
+    const platformPct = editInputNumber('import-quote-edit-fee-platform', Number(feePlataforma) * 100);
+    const bankPct = editInputNumber('import-quote-edit-fee-bank', Number(feeBanco) * 100);
+    return {
+        feePlataforma: Number.isFinite(platformPct) && platformPct >= 0 ? platformPct / 100 : feePlataforma,
+        feeBanco: Number.isFinite(bankPct) && bankPct >= 0 ? bankPct / 100 : feeBanco,
+    };
+}
+
+function validProductPhoto(photo) {
+    return typeof photo === 'string' && /^data:image\/(?:jpeg|jpg|png|webp);base64,/i.test(photo);
+}
+
+function renderProductPhotoPreview(containerId, photos, { editable = false } = {}) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const list = Array.isArray(photos) ? photos.filter(validProductPhoto) : [];
+    container.hidden = list.length === 0;
+    container.innerHTML = list.map((photo, index) => `
+      <div class="c-quote-photo">
+        <img src="${escapeHtml(photo)}" alt="Foto del producto ${index + 1}" loading="lazy">
+        ${editable ? `<button type="button" class="c-quote-photo__remove" data-product-photo-remove="${index}" aria-label="Quitar foto ${index + 1}">&times;</button>` : ''}
+      </div>`).join('') + (list.length ? `<span class="c-quote-photo__count">${list.length}/5 fotos</span>` : '');
+}
+
+function renderProductPhotosDetail(photos) {
+    const container = document.getElementById('import-q-photos');
+    if (!container) return;
+    const list = Array.isArray(photos) ? photos.filter(validProductPhoto) : [];
+    container.hidden = list.length === 0;
+    container.innerHTML = list.map((photo, index) => `
+      <a class="c-quote-photo" href="${escapeHtml(photo)}" target="_blank" rel="noopener noreferrer">
+        <img src="${escapeHtml(photo)}" alt="Foto del producto ${index + 1}" loading="lazy">
+      </a>`).join('') + (list.length ? `<span class="c-quote-photo__count">${list.length} foto${list.length === 1 ? '' : 's'}</span>` : '');
+}
+
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('No se pudo leer la foto.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function blobToDataUrl(blob) {
+    return fileToDataUrl(new File([blob], 'producto.jpg', { type: blob.type || 'image/jpeg' }));
+}
+
+async function compressProductPhoto(file) {
+    if (!file?.type?.startsWith('image/')) throw new Error('Solo puedes seleccionar imágenes.');
+    const source = await fileToDataUrl(file);
+    const image = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo procesar una de las fotos.'));
+        img.src = source;
+    });
+    const maxSide = 1100;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    let quality = 0.78;
+    let blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    for (let i = 0; blob && blob.size > 180000 && i < 5; i += 1) {
+        quality -= 0.08;
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+    }
+    if (!blob || blob.size > 220000) throw new Error('Una foto sigue siendo demasiado grande.');
+    return blobToDataUrl(blob);
+}
+
+async function addProductPhotosFromInput(event, target) {
+    const files = Array.from(event.target.files || []).slice(0, Math.max(0, 5 - target.length));
+    event.target.value = '';
+    if (!files.length) return;
+    try {
+        const photos = [];
+        for (const file of files) photos.push(await compressProductPhoto(file));
+        target.push(...photos);
+        if (target === importEditPhotos) {
+            renderProductPhotoPreview('import-quote-edit-photos-preview', importEditPhotos, { editable: true });
+            recalcularCotizacionEditada();
+        } else {
+            renderProductPhotoPreview('import-quote-product-photos-preview', importNewQuotePhotos, { editable: true });
+        }
+        showToast(`${photos.length} foto${photos.length === 1 ? '' : 's'} preparada${photos.length === 1 ? '' : 's'} para guardar`, 'success', 2200);
+    } catch (error) {
+        showToast(error.message || 'No se pudo cargar la foto.', 'error');
+    }
+}
+
+function recalcularCotizacionEditada() {
+    if (!importCurrentQuote) return;
+    const company = getEditedCompany();
+    const fees = getEditedFees();
+    const raw = buildEditedRawFromControls();
+    const currency = document.getElementById('import-quote-edit-purchase-currency')?.value || 'CNY';
+    importEditedCompanyTarifaUSD = company.tariff;
+    importEditedFullName = importEditBaseName ? `${importEditBaseName} - ${company.name}` : `Cotización - ${company.name}`;
+    if (!raw || !(company.tariff > 0)) return;
+    const recalculated = computeImportQuoteFromRaw(raw, company.tariff, company.name, {
+        purchaseCurrency: currency,
+        feePlataforma: fees.feePlataforma,
+        feeBanco: fees.feeBanco,
+    });
+    if (!recalculated) return;
+    let edited = applyProductoLinkToQuote(recalculated, resolveProductoLinkForEdit(importCurrentQuote));
+    edited.productoFotos = importEditPhotos.slice();
+    edited = applySalePlanToQuote(edited, buildSalePlanForQuote(edited, resolveEditSalePrice(importCurrentQuote)));
+    importEditedQuote = edited;
+    const entradaEl = document.getElementById('import-quote-edit-entrada');
+    if (entradaEl) entradaEl.innerText = raw;
+    renderDetalleCotizacionImport(importEditedQuote, importEditedFullName);
 }
 
 function editarCotizacionImport() {
@@ -2973,6 +3599,23 @@ function editarCotizacionImport() {
         const v = Number(importCurrentQuote.ventaUnitarioUSD);
         salePriceInput.value = Number.isFinite(v) && v > 0 ? String(v) : '';
     }
+
+    const dims = importCurrentQuote.dimensionesCm || {};
+    const setEditValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+    setEditValue('import-quote-edit-dim-l', dims.l);
+    setEditValue('import-quote-edit-dim-w', dims.w);
+    setEditValue('import-quote-edit-dim-h', dims.h);
+    setEditValue('import-quote-edit-weight', importCurrentQuote.pesoPorCajaKg);
+    setEditValue('import-quote-edit-units', importCurrentQuote.unidadesPorCaja);
+    setEditValue('import-quote-edit-boxes', importCurrentQuote.cajas || 1);
+    setEditValue('import-quote-edit-purchase-price', importCurrentQuote.purchasePriceOriginalAmount ?? importCurrentQuote.purchasePrice?.amount ?? importCurrentQuote.precioMercanciaPorUnidadUSD);
+    setEditValue('import-quote-edit-china-shipping', importCurrentQuote.envioChinaPorCajaUSD || 0);
+    setEditValue('import-quote-edit-fee-platform', Number(importCurrentQuote.feePlataforma ?? feePlataforma) * 100);
+    setEditValue('import-quote-edit-fee-bank', Number(importCurrentQuote.feeBanco ?? feeBanco) * 100);
+    const currency = document.getElementById('import-quote-edit-purchase-currency');
+    if (currency) currency.value = (importCurrentQuote.purchasePriceOriginalCurrency || importCurrentQuote.purchasePrice?.currency || 'CNY').toUpperCase() === 'USD' ? 'USD' : 'CNY';
+    importEditPhotos = Array.isArray(importCurrentQuote.productoFotos) ? importCurrentQuote.productoFotos.filter(validProductPhoto) : [];
+    renderProductPhotoPreview('import-quote-edit-photos-preview', importEditPhotos, { editable: true });
 
     const entrada = reconstruirEntradaRawDesdeQuote(importCurrentQuote);
     const entradaEl = document.getElementById('import-quote-edit-entrada');
@@ -2995,61 +3638,23 @@ function editarCotizacionImport() {
     importEditedCompanyTarifaUSD = tarifaCurrent;
     importEditedFullName = importCurrentQuoteName || '';
 
-    onEmpresaEdicionChange();
+    recalcularCotizacionEditada();
     document.getElementById('import-btn-edit')?.classList.add('hidden');
     document.getElementById('import-btn-delete')?.classList.add('hidden');
     scrollImportQuoteDetailPanelIntoView();
 }
 
+/** Precio de venta para la edición: input si tiene valor, si no el ya guardado. */
 function onEmpresaEdicionChange() {
     if (!importCurrentQuote) return;
-    const compSel  = document.getElementById('import-quote-edit-company');
-    const custWrap = document.getElementById('import-quote-edit-custom-wrap');
-    const custRate = document.getElementById('import-quote-edit-custom-rate');
-    const selected = compSel?.value || 'custom';
-    let tarifaBaseUSD = 0, empresaNombre = 'Personalizado';
-    if (selected === 'custom') {
-        if (custWrap) custWrap.classList.remove('hidden');
-        const v = parseFloat(custRate?.value || '0');
-        tarifaBaseUSD = Number.isFinite(v) ? v : 0;
-    } else {
-        if (custWrap) custWrap.classList.add('hidden');
-        tarifaBaseUSD = parseFloat(selected);
-        empresaNombre = empresaNombrePorTarifaUSD(tarifaBaseUSD);
-    }
-    importEditedCompanyTarifaUSD = tarifaBaseUSD;
-    importEditedFullName = importEditBaseName ? `${importEditBaseName} - ${empresaNombre}` : `Cotización - ${empresaNombre}`;
-
-    const productoLink = resolveProductoLinkForEdit(importCurrentQuote);
-    const salePrice = resolveEditSalePrice(importCurrentQuote);
-
-    const entrada = reconstruirEntradaRawDesdeQuote(importCurrentQuote);
-    if (entrada) {
-        const recalculated = computeImportQuoteFromRaw(entrada, tarifaBaseUSD, empresaNombre);
-        if (recalculated) {
-            let edited = applyProductoLinkToQuote(recalculated, productoLink);
-            edited = applySalePlanToQuote(edited, buildSalePlanForQuote(edited, salePrice));
-            importEditedQuote = edited;
-            renderDetalleCotizacionImport(importEditedQuote, importEditedFullName);
-            return;
-        }
-    }
-    // Si no se puede recalcular (entradaRaw ausente o datos incompletos),
-    // usar la quote original con la empresa actualizada para que el guardado no falle.
-    let edited = applyProductoLinkToQuote({
-        ...importCurrentQuote,
-        empresaNombre,
-        empresaTarifaUSD: tarifaBaseUSD,
-        empresaEnvioUSD: tarifaBaseUSD,
-    }, productoLink);
-    edited = applySalePlanToQuote(edited, buildSalePlanForQuote(edited, salePrice));
-    importEditedQuote = edited;
-    renderDetalleCotizacionImport(importEditedQuote, importEditedFullName);
+    const selected = document.getElementById('import-quote-edit-company')?.value || 'custom';
+    document.getElementById('import-quote-edit-custom-wrap')?.classList.toggle('hidden', selected !== 'custom');
+    recalcularCotizacionEditada();
 }
 
-/** Precio de venta para la edición: input si tiene valor, si no el ya guardado. */
 function resolveEditSalePrice(fallbackQuote) {
     const el = document.getElementById('import-quote-edit-sale-price');
+    if (el && !(el.value || '').toString().trim()) return 0;
     const v = parseLocaleAmount(el?.value);
     if (Number.isFinite(v) && v > 0) return v;
     const prev = Number(fallbackQuote?.ventaUnitarioUSD);
@@ -3078,10 +3683,11 @@ function cancelarEdicionCotizacionImport() {
 
 async function actualizarCotizacionImport() {
     if (!importCurrentQuoteId) return;
+    recalcularCotizacionEditada();
     const nameInput = document.getElementById('import-quote-edit-name');
     const newBase = (nameInput?.value || '').trim();
     if (!newBase) { showToast('Ingresa el nombre base.', 'warning'); nameInput?.focus(); return; }
-    if (!importEditedQuote) { showToast('Selecciona una empresa primero.', 'warning'); return; }
+    if (!importEditedQuote || !buildEditedRawFromControls()) { showToast('Revisa medidas, peso, unidades, cajas y precio de compra.', 'warning'); return; }
     const productoLink = readProductoLinkInput('import-quote-edit-product-link');
     if (productoLink === false) return;
     importEditBaseName = newBase;
@@ -3368,12 +3974,26 @@ async function shareRatesImage() {
 // INIT
 // ═══════════════════════════════════════════════
 (async function init() {
+    showFileProtocolBanner();
+    if (isFileProtocol()) {
+        const listEl = document.getElementById('import-quotes-list');
+        if (listEl) {
+            listEl.innerHTML = `
+              <div class="c-import-quote-msg c-import-quote-msg--error" role="alert" data-error-code="FILE_PROTOCOL">
+                <p><strong>DAYZO necesita el servidor local</strong></p>
+                <p>Usa <code>npm run doctor:local</code> y <code>npm run dev</code>. Abre http://127.0.0.1:3001/calculadoraa</p>
+              </div>`;
+        }
+        return;
+    }
+
     resetHorizontalScroll();
     window.addEventListener('resize', resetHorizontalScroll, { passive: true });
     window.addEventListener('orientationchange', () => setTimeout(resetHorizontalScroll, 150), { passive: true });
 
     setupStaticInteractions();
     await checkAuth();
+    restoreImportDraft();
     try { await refresh(); } catch (e) { console.error('Init refresh:', e); }
     try { await loadStats(); } catch (e) { console.error('Init stats:', e); }
     setupSaleSimulatorInteractions();
@@ -3381,7 +4001,6 @@ async function shareRatesImage() {
     try { await cargarCotizacionesImport(); } catch (e) { console.error('Init quotes:', e); }
     resetHorizontalScroll();
     connectWS();
-    // Refresca la variación de 24h periódicamente (ligero, una sola consulta)
     setInterval(loadStats, 60000);
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/service-worker.js').catch(() => {});
@@ -3391,4 +4010,5 @@ async function shareRatesImage() {
             requestAnimationFrame(() => chartInstance.resize());
         }
     });
+    window.addEventListener('beforeunload', persistImportDraft);
 })();

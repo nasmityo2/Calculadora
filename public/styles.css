@@ -7,6 +7,11 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* El atributo `hidden` debe ganar siempre: varios bloques declaran display:flex
+   o display:grid y eso hacía que paneles marcados como ocultos (el de tasas de
+   otra fecha, el aviso vacío) quedaran visibles desde el primer render. */
+[hidden] { display: none !important; }
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
@@ -742,6 +747,12 @@ textarea:focus {
   min-width: 48px;
 }
 
+.c-calc-hint {
+  margin: var(--s2) 0 0;
+  font-size: 0.7rem;
+  color: var(--text-ghost);
+}
+
 .c-calc-results {
   display: flex;
   flex-direction: column;
@@ -764,6 +775,24 @@ textarea:focus {
 .c-result-row--green { border-left: 4px solid var(--green); }
 .c-result-row--blue  { border-left: 4px solid var(--blue); }
 .c-result-row--amber { border-left: 4px solid var(--amber); }
+.c-result-row--slate { border-left: 4px solid var(--text-ghost); }
+
+/* Símbolo de la moneda antes del número: se lee de un vistazo qué es cada fila. */
+.c-result-row__sym {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-ghost);
+}
+
+/* Pie de la calculadora: con qué tasas se hizo la cuenta. */
+.c-calc-rate-note {
+  margin: var(--s3) 0 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--text-ghost);
+  text-align: center;
+}
 
 .c-result-row__left {
   display: flex;
@@ -1757,6 +1786,55 @@ textarea:focus {
   font-size: 14px;
 }
 
+.c-quote-photo-field { display: grid; gap: var(--s2); }
+.c-quote-photo-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 1px dashed rgba(232,84,26,0.45);
+  border-radius: var(--r-md);
+  background: rgba(232,84,26,0.07);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.c-quote-photo-picker:hover { background: rgba(232,84,26,0.13); }
+.c-quote-photo-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.c-quote-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.c-quote-photo {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  border: var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-card);
+}
+.c-quote-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.c-quote-photo__remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+.c-quote-photo__count { align-self: center; font-size: 0.72rem; color: var(--text-soft); }
+.c-quote-photos--detail { margin: 0 0 var(--s4); }
+
 .c-producto-link {
   color: var(--accent);
   text-decoration: none;
@@ -2028,6 +2106,37 @@ textarea:focus {
   background: var(--bg-card);
   color: var(--text-ink);
 }
+
+.c-quote-edit__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+}
+.c-quote-edit__fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.c-quote-edit__input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-card);
+  color: var(--text-ink);
+  font: inherit;
+  font-size: 16px;
+}
+.c-quote-edit__input:focus,
+.c-quote-edit__name:focus,
+.c-quote-edit__link:focus,
+.c-quote-edit__select:focus,
+.c-quote-edit__custom-input:focus { outline: 2px solid rgba(232,84,26,0.35); outline-offset: 1px; }
+.c-quote-photo-field--edit { margin: var(--s2) 0 var(--s3); }
 
 .c-quote-edit__btns {
   display: flex;
@@ -2816,7 +2925,7 @@ textarea:focus {
    ═══════════════════════════════════════════════════════════════════════ */
 .c-sim-rates {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--s2);
   margin-bottom: var(--s4);
 }
@@ -2832,7 +2941,6 @@ textarea:focus {
   min-width: 0;
 }
 .c-sim-rate--buy  { border-left-color: var(--green); }
-.c-sim-rate--sell { border-left-color: var(--red); }
 .c-sim-rate--bcv  { border-left-color: var(--blue); }
 .c-sim-rate--cny  { border-left-color: var(--amber); }
 .c-sim-rate__lab {
@@ -2879,7 +2987,7 @@ textarea:focus {
 .c-sim-base__type { font-size: 0.66rem; color: var(--text-ghost); }
 .c-sim-base__right { text-align: right; min-width: 0; }
 .c-sim-base__usd { display: block; font-family: var(--font-mono); font-weight: 500; color: var(--accent); }
-.c-sim-base__bs  { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-soft); }
+.c-sim-base__cross { display: block; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-soft); }
 
 .c-sim-price {
   display: flex;
@@ -3147,7 +3255,7 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   gap: var(--s3);
   margin-bottom: var(--s3);
 }
-.c-quote-card__titlewrap { min-width: 0; }
+.c-quote-card__titlewrap { min-width: 0; flex: 1 1 auto; }
 .c-quote-card__name {
   margin: 0;
   font-family: var(--font-display);
@@ -3155,7 +3263,9 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   font-weight: 700;
   color: var(--text-ink);
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
 .c-quote-card__tags {
   display: flex;
@@ -3292,6 +3402,40 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
 .c-quote-totals__label { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--text-ink); }
 .c-quote-totals__val { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 500; color: var(--accent); }
 
+/* Equivalentes BCV · yuan: renglón propio, alineado con el monto principal. */
+.c-quote-totals { flex-wrap: wrap; }
+.c-quote-totals__cross {
+  flex-basis: 100%;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+
+.c-quote-detail__row { flex-wrap: wrap; }
+.c-quote-detail__cross {
+  flex-basis: 100%;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}
+
+/* Aviso de qué tasa usa cada bloque de la cotización guardada. */
+.c-quote-rate-note {
+  margin: var(--s2) 0;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--text-ghost);
+}
+
+.c-quote-kpi__cross {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
 /* Link del producto */
 .c-quote-card__link {
   display: flex;
@@ -3311,6 +3455,26 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
 .c-quote-card__link i { flex-shrink: 0; color: var(--text-soft); }
 .c-quote-card__link span { min-width: 0; }
 .c-quote-card__link:hover { border-color: rgba(232,84,26,0.35); text-decoration: underline; }
+
+.c-quote-card__product-photo {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  margin-bottom: var(--s3);
+  border: var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-input);
+  color: var(--text-soft);
+  font-size: 0.75rem;
+}
+.c-quote-card__product-photo img {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  background: var(--bg-card);
+}
 
 /* Acciones */
 .c-quote-card__actions {
@@ -3337,6 +3501,7 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
 }
 .c-quote-card__btn:active { transform: scale(0.98); }
 .c-quote-card__btn--edit { border: var(--border-accent); background: var(--accent-pale); color: var(--accent); }
+.c-quote-card__btn--simulate { border: 1px solid rgba(14,203,129,0.32); background: var(--green-pale); color: var(--green); }
 .c-quote-card__btn--img  { border: var(--border-strong); background: var(--bg-elevated); color: var(--text-ink); }
 .c-quote-card__btn--img:hover { border-color: rgba(232,84,26,0.3); color: var(--accent); }
 .c-quote-card__btn--del  { border: 1px solid rgba(246,70,93,0.35); background: var(--red-pale); color: var(--red); }
@@ -3344,6 +3509,10 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
 @media (max-width: 767px) {
   .c-quote-kpis { grid-template-columns: repeat(2, 1fr); }
   .c-quote-hero__aside { padding-left: 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.08); padding-top: var(--s2); }
+}
+
+@media (max-width: 420px) {
+  .c-quote-edit__fields { grid-template-columns: 1fr; }
 }
 
 /* ═══════════════════════════════════════════════
@@ -3505,12 +3674,13 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   .c-hist-banner__close { margin-left: 0; }
 }
 
-/* Cotizaciones v2: resumen compacto + detalle bajo demanda */
+/* Cotizaciones v2: resumen compacto + detalle bajo demanda
+   Apilado vertical: evita aplastar el nombre en la columna estrecha de Importación. */
 .c-quote-card--compact {
   padding: var(--s3);
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 1fr;
+  align-items: stretch;
   gap: var(--s3);
 }
 
@@ -3518,15 +3688,36 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--s2);
+  gap: var(--s3);
   min-width: 0;
+  width: 100%;
+}
+
+.c-quote-card--compact .c-quote-card__name {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.c-quote-card--compact .c-quote-card__tags {
+  flex-wrap: wrap;
+}
+
+.c-quote-card--compact .c-quote-card__date {
+  white-space: nowrap;
+}
+
+.c-quote-card--compact .c-quote-card__profit {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .c-quote-compact__metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(78px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--s2);
   margin: 0;
+  width: 100%;
 }
 
 .c-quote-compact__metrics div {
@@ -3557,7 +3748,9 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
 .c-quote-compact__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--s2);
+  width: 100%;
 }
 
 .c-quote-simulate,
@@ -3640,6 +3833,38 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   grid-column: 1 / -1;
   padding-top: var(--s3);
   border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Al abrir una cotización, se conserva la tarjeta completa de la vista
+   anterior y se oculta el resumen para evitar duplicar información. */
+.c-quote-card--compact.is-expanded > .c-quote-compact__main,
+.c-quote-card--compact.is-expanded > .c-quote-compact__metrics {
+  display: none;
+}
+
+.c-quote-card--compact.is-expanded > .c-quote-compact__actions {
+  justify-content: flex-end;
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.c-quote-card--compact.is-expanded > .c-quote-compact__actions .c-quote-simulate,
+.c-quote-card--compact.is-expanded > .c-quote-compact__actions .c-quote-menu {
+  display: none;
+}
+
+.c-quote-card--compact.is-expanded > .c-quote-lazy-detail {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.c-quote-card--compact.is-expanded > .c-quote-lazy-detail > .c-quote-card--expanded {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .c-quote-lazy-detail__section {
@@ -3728,21 +3953,13 @@ button, a, summary, label[role="button"] { touch-action: manipulation; }
   line-height: 1.4;
 }
 
-@media (max-width: 1100px) {
-  .c-quote-card--compact { grid-template-columns: minmax(0, 1fr) auto; }
-  .c-quote-compact__metrics { grid-column: 1 / -1; grid-row: 2; }
-}
-
 @media (max-width: 640px) {
   .c-quotes-card__meta { gap: var(--s2); }
   .c-quotes-filter { flex: 1 1 130px; min-width: 0; min-height: 44px; }
-  .c-quote-card--compact { display: block; padding: var(--s3); }
-  .c-quote-compact__metrics { margin-top: var(--s3); grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .c-quote-compact__actions { margin-top: var(--s3); display: grid; grid-template-columns: 1fr auto auto; }
+  .c-quote-compact__actions { display: grid; grid-template-columns: 1fr auto auto; }
   .c-quote-simulate { width: 100%; }
   .c-quote-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .c-quote-toggle { width: 44px; padding: 0; }
-  .c-quote-lazy-detail { margin-top: var(--s3); }
   .c-quote-lazy-detail__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

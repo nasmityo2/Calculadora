@@ -4,14 +4,17 @@
  * - Network-first para tasas con respaldo a la última respuesta en cache (datos stale).
  * - El resto de /api/ pasa siempre a red (datos sensibles: auth, cotizaciones).
  */
-const CACHE = 'dayzo-v5';
+const CACHE = 'dayzo-v7';
 const SHELL = [
   '/calculadoraa',
   '/styles.css',
   '/tailwind.css',
   '/css/tokens.css',
+  '/css/quote-detail.css',
   '/app.js',
   '/js/sale-calculations.js',
+  '/js/import-parser.js',
+  '/js/import-quote-view.js',
   '/js/rates-socket.js',
   '/js/url-utils.js',
   '/css/auth.css',

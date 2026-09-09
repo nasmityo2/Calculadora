@@ -1,6 +1,0 @@
-# Plantilla de firma de release. Copiar a android/key.properties (IGNORADO en git)
-# y rellenar con los datos reales del keystore. El keystore vive FUERA del repo.
-storePassword=CHANGE_ME
-keyPassword=CHANGE_ME
-keyAlias=dayzo
-storeFile=/ruta/segura/fuera/del/repo/dayzo-release.jks

@@ -170,3 +170,36 @@ test('rechaza ceros, negativos, extremos y relaciones inconsistentes', () => {
     assert.equal(result.error.code, code);
   }
 });
+
+test('el envío China en yuanes se convierte con la tasa del servidor', () => {
+  const enYuan = canonicalizeImportQuote(
+    baseInput({ envioChinaPorCajaUSD: undefined, envioChinaPrice: { amount: 28, currency: 'CNY' } }),
+    { cnyRate: 7, cnySource: 'bcv' }
+  );
+  assert.equal(enYuan.ok, true, enYuan.error?.message);
+  // 28 ¥ / 7 = $4 por caja, igual que declararlo directamente en dólares.
+  approx(enYuan.value.envioChinaPorCajaUSD, 4);
+  approx(enYuan.value.envioChinaUSD, 4);
+  assert.deepEqual(enYuan.value.envioChinaPrice, { amount: 28, currency: 'CNY' });
+
+  const enUsd = canonicalizeImportQuote(baseInput({ envioChinaPorCajaUSD: 4 }), {
+    cnyRate: 7,
+    cnySource: 'bcv',
+  });
+  approx(enUsd.value.inversionTotalUSD, enYuan.value.inversionTotalUSD);
+  assert.deepEqual(enUsd.value.envioChinaPrice, { amount: 4, currency: 'USD' });
+});
+
+test('el envío China rechaza montos negativos y monedas desconocidas', () => {
+  const negativo = canonicalizeImportQuote(
+    baseInput({ envioChinaPorCajaUSD: undefined, envioChinaPrice: { amount: -1, currency: 'CNY' } })
+  );
+  assert.equal(negativo.ok, false);
+  assert.equal(negativo.error.code, 'INVALID_CHINA_SHIPPING');
+
+  const moneda = canonicalizeImportQuote(
+    baseInput({ envioChinaPorCajaUSD: undefined, envioChinaPrice: { amount: 10, currency: 'EUR' } })
+  );
+  assert.equal(moneda.ok, false);
+  assert.equal(moneda.error.code, 'INVALID_CHINA_SHIPPING_CURRENCY');
+});

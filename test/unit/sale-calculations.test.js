@@ -63,3 +63,26 @@ test('rechaza costo, tasa, cantidad y valores fuera de rango', () => {
     assert.equal(result.code, code);
   }
 });
+
+test('precio en yuanes usa la tasa CNY/USD indicada', () => {
+  const result = calculateSaleSimulation({
+    costUsd: 10,
+    inputValue: 105,   // 105 ¥ a 7 ¥/$ = $15
+    mode: 'priceCny',
+    cnyPerUsd: 7,
+    count: 2,
+  });
+  assert.equal(result.ok, true);
+  approx(result.value.saleUsd, 15);
+  approx(result.value.profitUsd, 5);
+  approx(result.value.totalProfitUsd, 10);
+
+  const sinTasa = calculateSaleSimulation({
+    costUsd: 10,
+    inputValue: 105,
+    mode: 'priceCny',
+    cnyPerUsd: 0,
+  });
+  assert.equal(sinTasa.ok, false);
+  assert.equal(sinTasa.code, 'INVALID_CNY_RATE');
+});

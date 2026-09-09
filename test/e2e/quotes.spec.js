@@ -117,6 +117,7 @@ test('cotizaciones compactas escalan de 0 a 100 y cargan un detalle a la vez', a
   let cards = page.locator('.c-quote-card--compact');
   await expect(cards).toHaveCount(1);
   await expect(cards.first().locator('.c-quote-lazy-detail')).toBeHidden();
+  await expect(cards.first().locator('.c-quote-card__section')).toHaveCount(0);
   const compactBox = await cards.first().boundingBox();
   expect(compactBox.height).toBeLessThanOrEqual(230);
 
@@ -177,18 +178,22 @@ test('cotizaciones compactas escalan de 0 a 100 y cargan un detalle a la vez', a
   await firstCard.locator('[data-quote-action="toggle"]').click();
   await expect(firstCard.locator('.c-quote-detail-error')).toBeVisible();
   await page.unroute(detailPattern);
-  await firstCard.locator('[data-quote-action="retry-detail"]').click();
-  await expect(firstCard.locator('.c-quote-lazy-detail__section').first()).toBeVisible();
+  await firstCard.locator('[data-quote-action="retry-detail"]').click({ force: true });
+  await expect(firstCard.locator('.c-quote-card--expanded')).toBeVisible({ timeout: 15000 });
+  await expect(firstCard.locator('.c-quote-card__section')).toContainText('Desglose');
+  await expect(firstCard.locator('.c-quote-totals')).toBeVisible();
 
   await secondCard.locator('[data-quote-action="toggle"]').click();
   await expect(firstCard.locator('.c-quote-lazy-detail')).toBeHidden();
   await expect(firstCard.locator('[data-quote-action="toggle"]')).toHaveAttribute('aria-expanded', 'false');
-  await expect(secondCard.locator('.c-quote-lazy-detail__section').first()).toBeVisible();
+  await expect(secondCard.locator('.c-quote-card--expanded')).toBeVisible();
+  await expect(secondCard.locator('.c-quote-card__section')).toContainText('Desglose');
   await expect(secondCard.locator('[data-quote-action="toggle"]')).toHaveAttribute('aria-expanded', 'true');
+  const expandedSecondCard = secondCard.locator('.c-quote-card--expanded');
 
   const secondId = await secondCard.getAttribute('data-quote-id');
   const beforeSimulation = readQuoteJson(secondId);
-  await secondCard.locator('[data-quote-action="simulate"]').click();
+  await expandedSecondCard.locator('[data-quote-action="simulate"]').click();
   await expect(page.locator('#sim-source-banner')).toBeVisible();
   await expect(page.locator('#sim-source-banner')).toContainText('costos congelados');
   expect(readQuoteJson(secondId)).toBe(beforeSimulation);
@@ -197,16 +202,17 @@ test('cotizaciones compactas escalan de 0 a 100 y cargan un detalle a la vez', a
   await expect(page.locator('#sim-source-banner')).toBeHidden();
   expect(readQuoteJson(secondId)).toBe(beforeSimulation);
 
-  await secondCard.locator('[data-quote-action="simulate"]').click();
+  await expandedSecondCard.locator('[data-quote-action="simulate"]').click();
   await page.locator('#sim-input').fill('9.99');
   await page.locator('#sim-save-plan').click();
   await expect(page.locator('#sim-source-banner')).toContainText('Plan guardado');
   expect(JSON.parse(readQuoteJson(secondId)).ventaUnitarioUSD).toBe(9.99);
 
-  await secondCard.locator('.c-quote-menu summary').click();
-  await expect(secondCard.locator('[data-quote-action="edit"]')).toBeVisible();
-  await expect(secondCard.locator('[data-quote-action="image"]')).toBeVisible();
-  await expect(secondCard.locator('[data-quote-action="delete"]')).toBeVisible();
+  await secondCard.locator('[data-quote-action="toggle"]').click();
+  await expect(expandedSecondCard).toBeVisible();
+  await expect(expandedSecondCard.locator('[data-quote-action="edit"]')).toBeVisible();
+  await expect(expandedSecondCard.locator('[data-quote-action="image"]')).toBeVisible();
+  await expect(expandedSecondCard.locator('[data-quote-action="delete"]')).toBeVisible();
 
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

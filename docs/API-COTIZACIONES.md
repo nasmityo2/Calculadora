@@ -1,4 +1,4 @@
-# API de cotizaciones DAYZO v2
+# API de cotizaciones DAYZO v2 (+ cálculo v3)
 
 Base: `/api/import-quotes`. Requiere sesión; mutaciones requieren
 `X-CSRF-Token`.
@@ -51,8 +51,53 @@ de otro usuario responde 404 para no revelar existencia.
 
 POST/PUT aceptan temporalmente campos planos legacy, pero el servidor solo
 confía en entradas base y responde/persiste `calculationVersion` igual a
-`dayzo-import-v2`. Totales, costos, ROI, margen y ganancias se recalculan.
+`dayzo-import-v3`. Totales, costos, ROI, margen y ganancias se recalculan.
 `empresaEnvioUSD` es alias temporal de `empresaTarifaUSD`.
+
+### Precio de compra v3
+
+Entrada preferida:
+
+```json
+{
+  "purchasePrice": { "amount": 32.5, "currency": "CNY" }
+}
+```
+
+- `currency`: solo `CNY` o `USD`.
+- CNY se convierte en el servidor con la tasa live (o fallback marcado).
+- USD no se reconvierte a la base.
+- `cnyRateRequested` del cliente se ignora.
+- Se persisten `purchasePriceOriginalAmount`, `purchasePriceOriginalCurrency`,
+  `precioMercanciaPorUnidadUSD`, `precioMercanciaPorUnidadCNY`, equivalentes
+  finales y `rateSnapshot` (`cny`, `cnySource`, `capturedAt`, `stale`).
+- Lecturas legacy v1/v2 se enriquecen con equivalentes CNY usando el snapshot
+  congelado (o fallback etiquetado), sin reinterpretar costos USD.
+
+### Envío dentro de China v3
+
+El flete interno chino se cotiza en yuanes tan a menudo como en dólares, así que
+acepta la misma forma que el precio de compra:
+
+```json
+{
+  "envioChinaPrice": { "amount": 28, "currency": "CNY" }
+}
+```
+
+- `currency`: solo `CNY` o `USD`; a diferencia del precio de compra, `amount`
+  puede ser `0`.
+- CNY se convierte en el servidor con la misma tasa que el precio de compra.
+- `envioChinaPorCajaUSD` sigue aceptándose como entrada legacy (siempre USD) y
+  se devuelve siempre, ya convertido.
+- La respuesta incluye `envioChinaPrice` con la moneda original, para que
+  reeditar una cotización no cambie la moneda en que se escribió.
+
+### Monedas de presentación
+
+Las cotizaciones se leen en **USDT, dólar BCV y yuan**; nunca en bolívares. El
+equivalente en dólar BCV se calcula con el **precio de compra** del P2P
+(`p2pBuyVesPerUsdt`), nunca con el de venta.
 
 ## Error uniforme
 

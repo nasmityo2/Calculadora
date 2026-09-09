@@ -7,6 +7,7 @@ const {
   sanitizeProductoLink,
   validatePassword,
   validateUsername,
+  sanitizeImportQuote,
 } = require('../../src/validators');
 const { normalizeHttpUrl } = require('../../public/js/url-utils');
 
@@ -45,4 +46,23 @@ test('credenciales aplican los mínimos de formato', () => {
   assert.match(validateUsername('a'), /3 caracteres/);
   assert.equal(validatePassword('segura123'), null);
   assert.match(validatePassword('sin-numeros'), /número/);
+});
+
+test('sanitizeImportQuote conserva el envío China con su moneda', () => {
+  const ok = sanitizeImportQuote({
+    empresaTarifaUSD: 865,
+    cajas: 1,
+    unidadesPorCaja: 10,
+    dimensionesCm: { l: 20, w: 20, h: 20 },
+    pesoPorCajaKg: 5,
+    purchasePrice: { amount: 32.5, currency: 'CNY' },
+    envioChinaPrice: { amount: 28, currency: 'CNY' },
+  });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.value.envioChinaPrice, { amount: 28, currency: 'CNY' });
+
+  // Un envío de cero es válido; un precio de compra de cero no.
+  assert.equal(sanitizeImportQuote({ envioChinaPrice: { amount: 0, currency: 'USD' } }).ok, true);
+  assert.equal(sanitizeImportQuote({ purchasePrice: { amount: 0, currency: 'USD' } }).ok, false);
+  assert.equal(sanitizeImportQuote({ envioChinaPrice: { amount: 5, currency: 'EUR' } }).ok, false);
 });

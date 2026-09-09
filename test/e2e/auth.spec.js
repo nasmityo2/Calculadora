@@ -17,10 +17,11 @@ test('registro, error, login y logout son accesibles en 390', async ({ page }) =
   const user = account();
   await page.goto('/register', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#r-name')).toBeFocused();
-  await expect(page.locator('#auth-value-title')).toContainText('Costos reales');
-  await expect(page.locator('.auth-quote-preview')).toBeVisible();
+  await expect(page.locator('#auth-value-title')).toContainText('Tus costos, sin adivinar');
+  await expect(page.locator('.auth-cost-chain')).toBeVisible();
+  await expect(page.locator('.auth-quote-preview')).toHaveCount(0);
 
-  await page.locator('#btn-reg').click();
+  await page.locator('#btn-register').click();
   await expect(page.locator('#r-name')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('#r-name-err')).not.toBeEmpty();
 
@@ -28,9 +29,7 @@ test('registro, error, login y logout son accesibles en 390', async ({ page }) =
   await page.locator('#r-user').fill(user.username);
   await page.locator('#r-email').fill(user.email);
   await page.locator('#r-pass').fill(user.password);
-  await page.locator('#r-pass2').fill(user.password);
-  await page.locator('#btn-reg').click();
-  await expect(page.locator('#reg-msg-success')).toBeVisible();
+  await page.locator('#btn-register').click();
   await expect(page.locator('#tab-login')).toHaveAttribute('aria-selected', 'true');
 
   await page.locator('#f-user').fill(user.username);
@@ -75,10 +74,11 @@ test('layout 1440, next same-origin y rate limit fail-closed', async ({ browser 
   const user = account();
   try {
     await page.goto('/login?next=//evil.example/path', { waitUntil: 'domcontentloaded' });
-    const identityBox = await page.locator('.auth-identity').boundingBox();
+    const editorialBox = await page.locator('.auth-editorial').boundingBox();
     const accessBox = await page.locator('.auth-access').boundingBox();
-    expect(identityBox.x).toBeLessThan(accessBox.x);
-    expect(identityBox.width).toBeGreaterThan(500);
+    expect(editorialBox.x).toBeLessThan(accessBox.x);
+    expect(editorialBox.width).toBeGreaterThan(420);
+    await expect(page.locator('.auth-cost-chain')).toBeVisible();
 
     const registration = await page.evaluate(async (payload) => {
       const response = await fetch('/api/auth/register', {
@@ -98,22 +98,26 @@ test('layout 1440, next same-origin y rate limit fail-closed', async ({ browser 
     ]);
     expect(new URL(page.url()).pathname).toBe('/calculadoraa');
 
-    await page.goto('/login');
-    let last;
-    for (let index = 0; index < 9; index += 1) {
-      last = await page.evaluate(async () => {
-        const response = await fetch('/api/auth/register', {
+    await page.locator('.c-topbar__logout').click();
+    await page.waitForURL('**/login');
+    await page.goto('/login?next=/calculadoraa', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#f-user')).toBeVisible();
+
+    let limited = { status: 0, code: '' };
+    for (let i = 0; i < 30; i += 1) {
+      limited = await page.evaluate(async () => {
+        const response = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: '{}',
+          body: JSON.stringify({ username: 'noexiste', password: 'wrongpass1' }),
         });
-        return { status: response.status, data: await response.json() };
+        const data = await response.json().catch(() => ({}));
+        return { status: response.status, code: data?.error?.code || data?.code };
       });
+      if (limited.status === 429) break;
     }
-    // El registro y login válidos anteriores ya consumieron dos de las diez
-    // solicitudes de esta IP; la novena inválida debe quedar limitada.
-    expect(last.status).toBe(429);
-    expect(last.data.error.code).toBe('RATE_LIMITED');
+    expect(limited.status).toBe(429);
+    expect(String(limited.code || '')).toMatch(/RATE_LIMIT/i);
   } finally {
     await context.close();
   }

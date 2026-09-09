@@ -267,9 +267,64 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
 
   result = await firstViewer.request(`/api/import-quotes/${quoteId}`);
   assert.equal(result.response.status, 200);
-  assert.equal(result.data.quote.quote.calculationVersion, 'dayzo-import-v2');
+  assert.equal(result.data.quote.quote.calculationVersion, 'dayzo-import-v3');
   assert.ok(Math.abs(result.data.quote.quote.inversionTotalUSD - 89.21) < 1e-9);
   assert.ok(Math.abs(result.data.quote.quote.costoUnitarioUSD - (89.21 / 24)) < 1e-9);
+  assert.equal(result.data.quote.quote.purchasePriceOriginalCurrency, 'USD');
+  assert.ok(Number(result.data.quote.quote.rateSnapshot?.cny) > 0);
+
+  result = await firstViewer.request('/api/import-quotes', {
+    method: 'POST',
+    csrfToken: viewerCsrf,
+    body: {
+      name: 'Compra CNY',
+      quote: {
+        empresaNombre: 'Orinoco',
+        empresaTarifaUSD: 865,
+        cajas: 1,
+        unidadesPorCaja: 50,
+        dimensionesCm: { l: 30, w: 30, h: 30 },
+        pesoPorCajaKg: 15,
+        purchasePrice: { amount: 32.5, currency: 'CNY' },
+        envioChinaPorCajaUSD: 0,
+        feePlataforma: 0.03,
+        feeBanco: 0.0125,
+      },
+    },
+  });
+  assert.equal(result.response.status, 200);
+  const cnyQuoteId = result.data.id;
+  result = await firstViewer.request(`/api/import-quotes/${cnyQuoteId}`);
+  assert.equal(result.response.status, 200);
+  const cnyQuote = result.data.quote.quote;
+  assert.equal(cnyQuote.purchasePriceOriginalCurrency, 'CNY');
+  assert.equal(cnyQuote.purchasePriceOriginalAmount, 32.5);
+  assert.equal(cnyQuote.precioMercanciaPorUnidadCNY, 32.5);
+  assert.ok(cnyQuote.costoUnitarioCNYEquivalent > 0);
+  // Cliente no puede imponer tasa arbitraria
+  const frozenCny = cnyQuote.rateSnapshot.cny;
+  result = await firstViewer.request(`/api/import-quotes/${cnyQuoteId}`, {
+    method: 'PUT',
+    csrfToken: viewerCsrf,
+    body: {
+      name: 'Compra CNY',
+      quote: {
+        empresaNombre: 'Orinoco',
+        empresaTarifaUSD: 865,
+        cajas: 1,
+        unidadesPorCaja: 50,
+        dimensionesCm: { l: 30, w: 30, h: 30 },
+        pesoPorCajaKg: 15,
+        purchasePrice: { amount: 32.5, currency: 'CNY' },
+        cnyRateRequested: 1,
+        envioChinaPorCajaUSD: 0,
+      },
+    },
+  });
+  assert.equal(result.response.status, 200);
+  result = await firstViewer.request(`/api/import-quotes/${cnyQuoteId}`);
+  assert.notEqual(result.data.quote.quote.rateSnapshot.cny, 1);
+  assert.ok(Number(result.data.quote.quote.rateSnapshot.cny) > 0);
 
   result = await firstViewer.request('/api/import-quotes/no-es-uuid');
   assert.equal(result.response.status, 400);
@@ -319,7 +374,7 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
   assert.equal(result.response.status, 200);
   assert.equal(result.data.apiVersion, '2');
   assert.equal(result.data.quotes.length, 2);
-  assert.equal(result.data.total, 3);
+  assert.equal(result.data.total, 4); // Aislada + Compra CNY + Producto B + Producto C
   assert.equal(result.data.pagination.hasMore, true);
   assert.equal(result.data.pagination.nextOffset, 2);
   assert.equal(Object.hasOwn(result.data.quotes[0], 'quote'), false);
@@ -327,7 +382,7 @@ test('auth, sesiones, CSRF, roles, aislamiento y bootstrap son fail-closed', { t
 
   result = await firstViewer.request('/api/import-quotes?limit=2&offset=2&sort=recent');
   assert.equal(result.response.status, 200);
-  assert.equal(result.data.quotes.length, 1);
+  assert.equal(result.data.quotes.length, 2);
   assert.equal(result.data.pagination.hasMore, false);
   assert.equal(firstPageIds.includes(result.data.quotes[0].id), false);
 

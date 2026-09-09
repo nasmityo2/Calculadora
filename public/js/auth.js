@@ -58,6 +58,7 @@
         const button = $(`tab-${name}`);
         const panel = $(`form-${name}`);
         button?.classList.toggle('is-active', selected);
+        button?.classList.toggle('auth-tab', true);
         button?.setAttribute('aria-selected', String(selected));
         if (panel) {
           panel.classList.toggle('is-visible', selected);
@@ -72,7 +73,7 @@
 
     $('tab-login')?.addEventListener('click', () => switchTab('login'));
     $('tab-register')?.addEventListener('click', () => switchTab('register'));
-    document.querySelector('.auth-tabs')?.addEventListener('keydown', (event) => {
+    document.querySelector('.auth-mode-switch, .auth-tabs')?.addEventListener('keydown', (event) => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
       event.preventDefault();
       const next = $('tab-login')?.getAttribute('aria-selected') === 'true' ? 'register' : 'login';
@@ -164,7 +165,7 @@
 
       setLoading({
         buttonId: 'btn-login', spinnerId: 'login-spinner', textId: 'login-btn-text',
-        loading: true, loadingText: 'Verificando…', idleText: 'Entrar a DAYZO',
+        loading: true, loadingText: 'Verificando…', idleText: 'Entrar a mi mesa de costos',
       });
       try {
         const response = await fetch('/api/auth/login', {
@@ -175,7 +176,7 @@
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success) {
           $('btn-login')?.classList.add('is-success');
-          $('login-btn-text').textContent = 'Acceso concedido';
+          $('login-btn-text').textContent = 'Entrando…';
           window.setTimeout(() => {
             const rawNext = new URLSearchParams(window.location.search).get('next') || '';
             window.location.replace(safeNextPath(rawNext, window.location.origin));
@@ -195,7 +196,7 @@
         if (!$('btn-login')?.classList.contains('is-success')) {
           setLoading({
             buttonId: 'btn-login', spinnerId: 'login-spinner', textId: 'login-btn-text',
-            loading: false, loadingText: '', idleText: 'Entrar a DAYZO',
+            loading: false, loadingText: '', idleText: 'Entrar a mi mesa de costos',
           });
         }
       }
@@ -203,12 +204,11 @@
 
     $('register-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
-      clearMessages(['reg-msg-error', 'reg-msg-success']);
+      clearMessages(['register-msg-error', 'reg-msg-error', 'reg-msg-success']);
       const fullName = $('r-name')?.value.trim() || '';
       const username = $('r-user')?.value.trim() || '';
       const email = $('r-email')?.value.trim().toLowerCase() || '';
       const password = $('r-pass')?.value || '';
-      const confirmation = $('r-pass2')?.value || '';
       if (fullName.length < 2) return fieldError('r-name', 'Ingresa tu nombre completo.');
       if (username.length < 3 || !USER_RE.test(username) || EMAIL_RE.test(username)) {
         return fieldError('r-user', 'Usa 3–32 letras, números, puntos, guiones o guion bajo.');
@@ -216,11 +216,10 @@
       if (!EMAIL_RE.test(email)) return fieldError('r-email', 'Ingresa un correo válido.');
       const passwordResult = validatePassword(password);
       if (!passwordResult.valid) return fieldError('r-pass', passwordResult.message);
-      if (password !== confirmation) return fieldError('r-pass2', 'Las contraseñas no coinciden.');
 
       setLoading({
-        buttonId: 'btn-reg', spinnerId: 'reg-spinner', textId: 'reg-btn-text',
-        loading: true, loadingText: 'Creando cuenta…', idleText: 'Crear cuenta DAYZO',
+        buttonId: 'btn-register', spinnerId: 'register-spinner', textId: 'register-btn-text',
+        loading: true, loadingText: 'Creando cuenta…', idleText: 'Crear cuenta',
       });
       try {
         const response = await fetch('/api/auth/register', {
@@ -230,27 +229,42 @@
         });
         const data = await response.json().catch(() => ({}));
         if (response.ok && data.success) {
-          showMessage('reg-msg-success', 'reg-ok-txt', data.message || 'Cuenta creada. Ya puedes ingresar.', { focus: true });
+          showMessage('login-msg-warning', 'login-warn-txt', data.message || 'Cuenta creada. Ya puedes entrar.', { focus: true });
           $('register-form')?.reset();
-          if ($('pw-strength')) $('pw-strength').hidden = true;
-          window.setTimeout(() => switchTab('login'), 800);
+          window.setTimeout(() => switchTab('login'), 400);
           return;
         }
         showMessage(
-          'reg-msg-error',
-          'reg-err-txt',
+          'register-msg-error',
+          'register-err-txt',
           apiErrorMessage(data, 'No se pudo crear la cuenta.'),
           { focus: true }
         );
       } catch (_) {
-        showMessage('reg-msg-error', 'reg-err-txt', 'Sin conexión con DAYZO. Revisa tu red.', { focus: true });
+        showMessage('register-msg-error', 'register-err-txt', 'Sin conexión con DAYZO. Revisa tu red.', { focus: true });
       } finally {
         setLoading({
-          buttonId: 'btn-reg', spinnerId: 'reg-spinner', textId: 'reg-btn-text',
-          loading: false, loadingText: '', idleText: 'Crear cuenta DAYZO',
+          buttonId: 'btn-register', spinnerId: 'register-spinner', textId: 'register-btn-text',
+          loading: false, loadingText: '', idleText: 'Crear cuenta',
         });
       }
     });
+
+    function updateCostChain(cnyRate) {
+      const rate = Number(cnyRate) > 0 ? Number(cnyRate) : 6.53;
+      const productCny = 32.5;
+      const productUsd = productCny / rate;
+      const fees = productUsd * 0.0425;
+      const freight = 2.02;
+      const finalUnit = productUsd + fees + freight;
+      const setText = (id, value) => { if ($(id)) $(id).textContent = value; };
+      setText('chain-product', `¥${numberFormat.format(productCny)}`);
+      setText('chain-fx', `$${numberFormat.format(productUsd)}`);
+      setText('chain-fx-rate', `${numberFormat.format(rate)} CNY/USD`);
+      setText('chain-fees', `+$${numberFormat.format(fees)}`);
+      setText('chain-freight', `+$${numberFormat.format(freight)}`);
+      setText('chain-final', `$${numberFormat.format(finalUnit)}`);
+    }
 
     async function loadRateSummary() {
       try {
@@ -261,11 +275,13 @@
         const summary = [
           rates.binance > 0 ? `P2P ${numberFormat.format(rates.binance)}` : null,
           rates.bcv > 0 ? `BCV ${numberFormat.format(rates.bcv)}` : null,
-          Number.isFinite(data.diff_pct) ? `Brecha ${numberFormat.format(data.diff_pct)}%` : null,
+          rates.cny > 0 ? `CNY ${numberFormat.format(rates.cny)}` : null,
         ].filter(Boolean).join(' · ');
-        if ($('login-rates-summary')) $('login-rates-summary').textContent = summary || 'Tasas no disponibles';
+        if ($('login-rates-summary')) $('login-rates-summary').textContent = summary || 'Tasas públicas no disponibles';
+        updateCostChain(rates.cny);
       } catch (_) {
         if ($('login-rates-summary')) $('login-rates-summary').textContent = 'Sin conexión con tasas';
+        updateCostChain(6.53);
       }
     }
 

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>DAYZO — Costos reales para importar y vender</title>
-  <meta name="description" content="Accede a DAYZO para calcular costos reales, guardar cotizaciones y simular ventas en Venezuela.">
+  <title>DAYZO — Tus costos, sin adivinar</title>
+  <meta name="description" content="Cotiza importaciones, congela tus números y simula cuánto vender.">
   <meta name="theme-color" content="#0B0E11">
   <link rel="icon" href="/icons/dayzo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/css/tokens.css">
@@ -12,60 +12,85 @@
   <link rel="stylesheet" href="/css/auth.css">
   <script src="/js/auth.js" defer></script>
 </head>
-<body class="auth-page">
-  <main class="auth-shell">
-    <section class="auth-identity" aria-labelledby="auth-value-title">
-      <a class="auth-brand" href="/calculadoraa" aria-label="DAYZO, ir a las tasas">
-        <span class="auth-brand__word">DAYZO</span>
-        <span class="auth-brand__dot" aria-hidden="true"></span>
-      </a>
-      <div class="auth-value">
-        <p class="auth-eyebrow">Importa con claridad. Vende con margen.</p>
-        <h1 id="auth-value-title">Costos reales para importar y vender en Venezuela.</h1>
-        <p>Convierte dimensiones, flete, comisiones y tasas en una decisión que puedes explicar y repetir.</p>
-      </div>
+<body class="auth-page auth-page--desk">
+  <a class="auth-skip" href="#auth-form-anchor">Ir al formulario</a>
 
-      <article class="auth-quote-preview" aria-label="Ejemplo realista de cotización DAYZO">
-        <header>
-          <div>
-            <span class="auth-quote-preview__overline">Ejemplo de cotización</span>
-            <h2>Audífonos Bluetooth · 48 unidades</h2>
-          </div>
-          <span class="auth-quote-preview__company">Orinoco</span>
-        </header>
-        <dl>
-          <div><dt>Inversión total</dt><dd>$178,42</dd></div>
-          <div><dt>Costo por unidad</dt><dd>$3,72</dd></div>
-          <div><dt>Venta sugerida</dt><dd>$5,00</dd></div>
-          <div class="auth-quote-preview__profit"><dt>Ganancia proyectada</dt><dd>+$61,58</dd></div>
-        </dl>
-        <footer>
-          <span><i aria-hidden="true"></i> Tasas de referencia</span>
-          <strong id="login-rates-summary">Conectando…</strong>
-        </footer>
-      </article>
+  <header class="auth-masthead">
+    <a class="auth-brand" href="/calculadoraa" aria-label="DAYZO">
+      <span class="auth-brand__word">DAYZO</span>
+    </a>
+    <p class="auth-masthead__meta" id="login-rates-summary">Tasas públicas…</p>
+    <a class="auth-masthead__back" href="/calculadoraa">Volver a tasas</a>
+  </header>
 
-      <ul class="auth-trust" aria-label="Protecciones de la cuenta">
-        <li>Sesión segura</li>
-        <li>Cookie HttpOnly</li>
-        <li>7 días</li>
-      </ul>
+  <main class="auth-desk">
+    <section class="auth-editorial" aria-labelledby="auth-value-title">
+      <h1 id="auth-value-title">Tus costos, sin adivinar.</h1>
+      <p class="auth-editorial__lead">Cotiza importaciones, congela tus números y simula cuánto vender.</p>
+
+      <ol class="auth-cost-chain" aria-label="Cómo se forma el costo">
+        <li class="auth-cost-chain__node" data-step="1">
+          <span class="auth-cost-chain__label">Producto</span>
+          <strong class="auth-cost-chain__value" id="chain-product">¥32,50</strong>
+          <span class="auth-cost-chain__hint">compra unitaria</span>
+        </li>
+        <li class="auth-cost-chain__edge" aria-hidden="true">
+          <svg viewBox="0 0 48 12" width="48" height="12" focusable="false">
+            <path d="M0 6h40M34 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </li>
+        <li class="auth-cost-chain__node" data-step="2">
+          <span class="auth-cost-chain__label">CNY → USD</span>
+          <strong class="auth-cost-chain__value" id="chain-fx">$4,98</strong>
+          <span class="auth-cost-chain__hint" id="chain-fx-rate">tasa pública</span>
+        </li>
+        <li class="auth-cost-chain__edge" aria-hidden="true">
+          <svg viewBox="0 0 48 12" width="48" height="12" focusable="false">
+            <path d="M0 6h40M34 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </li>
+        <li class="auth-cost-chain__node" data-step="3">
+          <span class="auth-cost-chain__label">Comisiones</span>
+          <strong class="auth-cost-chain__value" id="chain-fees">+$0,21</strong>
+          <span class="auth-cost-chain__hint">plataforma + banco</span>
+        </li>
+        <li class="auth-cost-chain__edge" aria-hidden="true">
+          <svg viewBox="0 0 48 12" width="48" height="12" focusable="false">
+            <path d="M0 6h40M34 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </li>
+        <li class="auth-cost-chain__node" data-step="4">
+          <span class="auth-cost-chain__label">Flete</span>
+          <strong class="auth-cost-chain__value" id="chain-freight">+$2,02</strong>
+          <span class="auth-cost-chain__hint">internacional</span>
+        </li>
+        <li class="auth-cost-chain__edge auth-cost-chain__edge--final" aria-hidden="true">
+          <svg viewBox="0 0 48 12" width="48" height="12" focusable="false">
+            <path d="M0 6h40M34 1l6 5-6 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </li>
+        <li class="auth-cost-chain__node auth-cost-chain__node--final" data-step="5">
+          <span class="auth-cost-chain__label">Costo final</span>
+          <strong class="auth-cost-chain__value" id="chain-final">$7,21</strong>
+          <span class="auth-cost-chain__hint">por unidad</span>
+        </li>
+      </ol>
+      <p class="auth-editorial__note">Simulación anónima con tasas públicas. Tus cotizaciones guardadas congelan la tasa del momento.</p>
     </section>
 
-    <section class="auth-access" aria-label="Acceso a DAYZO">
+    <section class="auth-access" id="auth-form-anchor" aria-label="Acceso a DAYZO">
       <div class="auth-access__inner">
-        <div class="auth-tabs" role="tablist" aria-label="Acceso o registro">
-          <button class="auth-tab is-active" id="tab-login" role="tab" aria-selected="true"
-            aria-controls="form-login" type="button">Ingresar</button>
-          <button class="auth-tab" id="tab-register" role="tab" aria-selected="false"
+        <div class="auth-mode-switch" role="tablist" aria-label="Acceso o registro">
+          <button class="auth-mode-switch__btn is-active" id="tab-login" role="tab" aria-selected="true"
+            aria-controls="form-login" type="button">Entrar</button>
+          <button class="auth-mode-switch__btn" id="tab-register" role="tab" aria-selected="false"
             aria-controls="form-register" type="button">Crear cuenta</button>
         </div>
 
         <section class="auth-form-panel is-visible" id="form-login" role="tabpanel" aria-labelledby="tab-login">
           <header class="auth-form-heading">
-            <p class="auth-eyebrow">Tu espacio DAYZO</p>
-            <h2>Bienvenido</h2>
-            <p>Continúa con tus cotizaciones y simulaciones guardadas.</p>
+            <h2>Mesa de costos</h2>
+            <p>Accede a tus cotizaciones y simulaciones.</p>
           </header>
 
           <div id="login-msg-error" class="auth-message auth-message--error" role="alert" aria-live="assertive" tabindex="-1">
@@ -94,83 +119,54 @@
             </div>
             <button type="submit" id="btn-login" class="auth-submit">
               <span class="auth-spinner" id="login-spinner" aria-hidden="true"></span>
-              <span id="login-btn-text">Entrar a DAYZO</span>
+              <span id="login-btn-text">Entrar a mi mesa de costos</span>
             </button>
           </form>
         </section>
 
         <section class="auth-form-panel" id="form-register" role="tabpanel" aria-labelledby="tab-register" hidden>
           <header class="auth-form-heading">
-            <p class="auth-eyebrow">Empieza con datos claros</p>
-            <h2>Crea tu cuenta</h2>
-            <p>Guarda cotizaciones y retoma tus números desde cualquier lugar.</p>
+            <h2>Nueva mesa</h2>
+            <p>Crea tu cuenta para guardar cotizaciones.</p>
           </header>
 
-          <div id="reg-msg-error" class="auth-message auth-message--error" role="alert" aria-live="assertive" tabindex="-1">
-            <span id="reg-err-txt"></span>
-          </div>
-          <div id="reg-msg-success" class="auth-message auth-message--success" role="status" aria-live="polite" tabindex="-1">
-            <span id="reg-ok-txt"></span>
+          <div id="register-msg-error" class="auth-message auth-message--error" role="alert" aria-live="assertive" tabindex="-1">
+            <span id="register-err-txt"></span>
           </div>
 
           <form id="register-form" novalidate autocomplete="on">
             <div class="auth-field">
               <label for="r-name">Nombre completo</label>
-              <input id="r-name" type="text" name="fullName" placeholder="Tu nombre"
-                autocomplete="name" autocapitalize="words" aria-describedby="r-name-err" required>
+              <input id="r-name" type="text" name="fullName" autocomplete="name" required aria-describedby="r-name-err">
               <p class="auth-field__error" id="r-name-err" aria-live="polite"></p>
             </div>
-            <div class="auth-register-grid">
-              <div class="auth-field">
-                <label for="r-user">Usuario</label>
-                <input id="r-user" type="text" name="username" placeholder="tu_usuario"
-                  autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
-                  aria-describedby="r-user-err" required>
-                <p class="auth-field__error" id="r-user-err" aria-live="polite"></p>
-              </div>
-              <div class="auth-field">
-                <label for="r-email">Correo</label>
-                <input id="r-email" type="email" name="email" placeholder="tu@correo.com"
-                  autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false"
-                  aria-describedby="r-email-err" required>
-                <p class="auth-field__error" id="r-email-err" aria-live="polite"></p>
-              </div>
+            <div class="auth-field">
+              <label for="r-user">Usuario</label>
+              <input id="r-user" type="text" name="username" autocomplete="username"
+                autocapitalize="none" autocorrect="off" spellcheck="false" required aria-describedby="r-user-err">
+              <p class="auth-field__error" id="r-user-err" aria-live="polite"></p>
             </div>
-            <div class="auth-register-grid">
-              <div class="auth-field">
-                <label for="r-pass">Contraseña</label>
-                <div class="auth-password">
-                  <input id="r-pass" type="password" name="password" placeholder="8+ caracteres"
-                    autocomplete="new-password" aria-describedby="r-pass-err pw-label" required>
-                  <button type="button" data-password-toggle="r-pass" aria-label="Mostrar contraseña">Ver</button>
-                </div>
-                <div class="auth-strength" id="pw-strength" hidden aria-hidden="true">
-                  <span></span><span></span><span></span><span></span>
-                </div>
-                <p class="auth-field__hint" id="pw-label">Incluye letras y números.</p>
-                <p class="auth-field__error" id="r-pass-err" aria-live="polite"></p>
-              </div>
-              <div class="auth-field">
-                <label for="r-pass2">Confirmar contraseña</label>
-                <div class="auth-password">
-                  <input id="r-pass2" type="password" name="confirmPassword" placeholder="Repite la contraseña"
-                    autocomplete="new-password" aria-describedby="r-pass2-err" required>
-                  <button type="button" data-password-toggle="r-pass2" aria-label="Mostrar contraseña">Ver</button>
-                </div>
-                <p class="auth-field__error" id="r-pass2-err" aria-live="polite"></p>
-              </div>
+            <div class="auth-field">
+              <label for="r-email">Correo</label>
+              <input id="r-email" type="email" name="email" autocomplete="email" required aria-describedby="r-email-err">
+              <p class="auth-field__error" id="r-email-err" aria-live="polite"></p>
             </div>
-            <button type="submit" id="btn-reg" class="auth-submit">
-              <span class="auth-spinner" id="reg-spinner" aria-hidden="true"></span>
-              <span id="reg-btn-text">Crear cuenta DAYZO</span>
+            <div class="auth-field">
+              <label for="r-pass">Contraseña</label>
+              <div class="auth-password">
+                <input id="r-pass" type="password" name="password" autocomplete="new-password"
+                  required aria-describedby="r-pass-err r-pass-hint">
+                <button type="button" data-password-toggle="r-pass" aria-label="Mostrar contraseña">Ver</button>
+              </div>
+              <p class="auth-field__hint" id="r-pass-hint">Mínimo 8 caracteres, con letra y número.</p>
+              <p class="auth-field__error" id="r-pass-err" aria-live="polite"></p>
+            </div>
+            <button type="submit" id="btn-register" class="auth-submit">
+              <span class="auth-spinner" id="register-spinner" aria-hidden="true"></span>
+              <span id="register-btn-text">Crear cuenta</span>
             </button>
           </form>
         </section>
-
-        <footer class="auth-footer">
-          <a href="/calculadoraa">Ver tasas sin iniciar sesión</a>
-          <span>No ofrecemos recuperación hasta contar con un flujo seguro real.</span>
-        </footer>
       </div>
     </section>
   </main>

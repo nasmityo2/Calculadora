@@ -1,0 +1,56 @@
+/* Entrada dual CNY/USD del cálculo de importación */
+
+.c-file-banner {
+  background: #1a1410;
+  color: #f3e8d8;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #3a2f24;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.c-file-banner[hidden] { display: none !important; }
+.c-file-banner code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  background: #2a2118;
+  padding: 0.1em 0.35em;
+}
+
+.c-imp-price-row {
+  display: grid;
+  gap: 0.5rem;
+}
+.c-imp-currency {
+  display: inline-flex;
+  border: 1px solid var(--border, #2b3139);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.c-imp-currency__btn {
+  min-height: 44px;
+  min-width: 72px;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: #848e9c;
+  border: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+.c-imp-currency__btn.is-active {
+  background: #1e2329;
+  color: var(--accent, #E8541A);
+}
+.c-imp-price-equiv {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: #848e9c;
+}
+.c-imp-gfield--converted {
+  outline: 2px solid var(--accent, #E8541A);
+}
+.c-import-hint--error {
+  color: #f6465d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-imp-gfield--converted { outline: none; }
+}

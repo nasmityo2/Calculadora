@@ -10,6 +10,9 @@ const EMAIL_RE        = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const USERNAME_RE     = /^[a-zA-Z0-9._-]+$/;
 const UUID_RE         = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PRODUCTO_LINK_MAX_LEN = 2048;
+const PRODUCTO_FOTOS_MAX_COUNT = 5;
+const PRODUCTO_FOTO_MAX_LEN = 320000;
+const PRODUCTO_FOTO_RE = /^data:image\/(?:jpeg|jpg|png|webp);base64,[a-z0-9+/=]+$/i;
 
 // ─── Strings ────────────────────────────────────────────────────────────────
 
@@ -108,10 +111,48 @@ const QUOTE_NUMBER_FIELDS = [
 const QUOTE_STRING_FIELDS  = ['entradaRaw', 'empresaNombre', 'tipoCobro'];
 const QUOTE_BOOL_FIELDS    = ['tarifaMinAplicada'];
 
+function sanitizeProductoFotos(raw) {
+  if (raw == null) return { ok: true, value: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: 'Las fotos del producto son inválidas.' };
+  if (raw.length > PRODUCTO_FOTOS_MAX_COUNT) {
+    return { ok: false, error: `Puedes guardar hasta ${PRODUCTO_FOTOS_MAX_COUNT} fotos por producto.` };
+  }
+  const photos = [];
+  for (const photo of raw) {
+    if (typeof photo !== 'string' || photo.length > PRODUCTO_FOTO_MAX_LEN || !PRODUCTO_FOTO_RE.test(photo)) {
+      return { ok: false, error: 'Una foto del producto no tiene un formato válido o es demasiado grande.' };
+    }
+    photos.push(photo);
+  }
+  return { ok: true, value: photos };
+}
+
 /**
  * Valida y devuelve una versión saneada del objeto `quote`.
  * @returns {{ ok: boolean, error?: string, value?: object }}
  */
+/**
+ * Valida un importe con moneda explícita: { amount: number, currency: 'CNY'|'USD' }.
+ * Es la forma canónica de todo monto que el usuario puede escribir en yuanes o dólares.
+ */
+function sanitizeMoneyAmount(raw, { label, allowZero }) {
+  if (typeof raw !== 'object' || raw == null || Array.isArray(raw)) {
+    return { ok: false, error: `El ${label} es inválido.` };
+  }
+  const amount = Number(raw.amount);
+  const currency = cleanString(raw.currency, 8).toUpperCase();
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount === 0)) {
+    return {
+      ok: false,
+      error: `El ${label} debe ser un número ${allowZero ? 'no negativo' : 'mayor que cero'}.`,
+    };
+  }
+  if (currency !== 'CNY' && currency !== 'USD') {
+    return { ok: false, error: `La moneda del ${label} debe ser CNY o USD.` };
+  }
+  return { ok: true, value: { amount, currency } };
+}
+
 function sanitizeImportQuote(quote) {
   if (!quote || typeof quote !== 'object' || Array.isArray(quote)) {
     return { ok: false, error: 'El objeto de cotización es inválido.' };
@@ -157,6 +198,42 @@ function sanitizeImportQuote(quote) {
     if (link) out.productoLink = link;
   }
 
+  const photos = sanitizeProductoFotos(quote.productoFotos);
+  if (!photos.ok) return photos;
+  if (photos.value.length) out.productoFotos = photos.value;
+
+  // purchasePrice v3 aditivo: { amount, currency: CNY|USD }
+  if (quote.purchasePrice != null) {
+    const pp = sanitizeMoneyAmount(quote.purchasePrice, {
+      label: 'precio de compra',
+      allowZero: false,
+    });
+    if (!pp.ok) return pp;
+    out.purchasePrice = pp.value;
+  }
+
+  // envioChinaPrice v3 aditivo: el envío dentro de China también se cotiza en yuanes.
+  if (quote.envioChinaPrice != null) {
+    const sp = sanitizeMoneyAmount(quote.envioChinaPrice, {
+      label: 'envío China',
+      allowZero: true,
+    });
+    if (!sp.ok) return sp;
+    out.envioChinaPrice = sp.value;
+  }
+
+  if (quote.purchasePriceOriginalAmount != null) {
+    const n = Number(quote.purchasePriceOriginalAmount);
+    if (!Number.isFinite(n)) {
+      return { ok: false, error: 'purchasePriceOriginalAmount debe ser numérico.' };
+    }
+    out.purchasePriceOriginalAmount = n;
+  }
+  if (quote.purchasePriceOriginalCurrency != null) {
+    const c = cleanString(quote.purchasePriceOriginalCurrency, 8).toUpperCase();
+    if (c === 'CNY' || c === 'USD') out.purchasePriceOriginalCurrency = c;
+  }
+
   if (out.version == null) out.version = 1;
 
   return { ok: true, value: out };
@@ -173,6 +250,7 @@ module.exports = {
   isEmail,
   isUUID,
   sanitizeProductoLink,
+  sanitizeProductoFotos,
   sanitizeImportQuote,
   PRODUCTO_LINK_MAX_LEN,
 };

@@ -103,7 +103,8 @@ app.use(compression({
   },
 }));
 
-app.use(express.json({ limit: '512kb' }));
+// Las cotizaciones pueden incluir hasta cinco fotos comprimidas del producto.
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '512kb' }));
 
 // ─── SECCIÓN: SQLITE ─────────────────────────────────────────────────────────
@@ -164,6 +165,9 @@ db.exec(`
 `);
 
 // Migraciones aditivas (nunca borran datos existentes)
+// `cny` guarda los yuanes por dólar vigentes en cada snapshot: sin ella el modo
+// histórico mezclaría tasas VES de otra fecha con el yuan de hoy.
+try { db.exec('ALTER TABLE tasas ADD COLUMN cny REAL NOT NULL DEFAULT 0'); } catch (_) {}
 try { db.exec('ALTER TABLE users ADD COLUMN full_name TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE users ADD COLUMN email    TEXT'); } catch (_) {}
 try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email) WHERE email IS NOT NULL"); } catch (_) {}
@@ -490,17 +494,26 @@ ensureImportQuotesForeignKey();
 // ─── SECCIÓN: SENTENCIAS PREPARADAS ─────────────────────────────────────────
 // Se compilan una sola vez al arrancar (no en cada request).
 
+// `binance` = precio de COMPRA de USDT en el P2P (tradeType BUY); es la tasa de
+// referencia de toda la app. `binance_compra` es el precio de VENTA (tradeType
+// SELL); el nombre de la columna es histórico y no se renombra para no romper
+// bases de datos existentes.
 const stmtInsert = db.prepare(`
-  INSERT INTO tasas (timestamp, fecha, binance, binance_compra, bcv, diff_bs, diff_pct)
-  VALUES (@timestamp, @fecha, @binance, @binance_compra, @bcv, @diff_bs, @diff_pct)
+  INSERT INTO tasas (timestamp, fecha, binance, binance_compra, bcv, cny, diff_bs, diff_pct)
+  VALUES (@timestamp, @fecha, @binance, @binance_compra, @bcv, @cny, @diff_bs, @diff_pct)
 `);
 const stmtLast  = db.prepare('SELECT * FROM tasas ORDER BY timestamp DESC LIMIT 1');
 const stmtCount = db.prepare('SELECT COUNT(*) AS c FROM tasas');
 const stmtRango = db.prepare('SELECT MIN(timestamp) AS s, MAX(timestamp) AS e FROM tasas');
 
-const stmtHist24h     = db.prepare('SELECT * FROM tasas WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?');
-const stmtHistByFecha = db.prepare('SELECT * FROM tasas WHERE fecha LIKE ? ORDER BY timestamp DESC LIMIT ?');
-const stmtHistDefault = db.prepare('SELECT * FROM tasas ORDER BY timestamp DESC LIMIT ?');
+// Columnas explícitas (sin `id`): el historial de 24 h puede rondar el millar de
+// filas y se serializa entero en cada carga de la web.
+const HIST_COLS = 'timestamp, fecha, binance, binance_compra, bcv, cny, diff_bs, diff_pct';
+const stmtHist24h     = db.prepare(`SELECT ${HIST_COLS} FROM tasas WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?`);
+// Prefijo (no `%...%`): `fecha` es 'dd/mm/aaaa, hh:mm:ss', así que el filtro por
+// día es un prefijo y puede apoyarse en idx_fecha en vez de escanear la tabla.
+const stmtHistByFecha = db.prepare(`SELECT ${HIST_COLS} FROM tasas WHERE fecha LIKE ? ORDER BY timestamp DESC LIMIT ?`);
+const stmtHistDefault = db.prepare(`SELECT ${HIST_COLS} FROM tasas ORDER BY timestamp DESC LIMIT ?`);
 // 7D: un punto por hora (~168 puntos para 7 días)
 const stmtHistHourlySince = db.prepare(`
   SELECT
@@ -766,6 +779,7 @@ function checkRolloverVigenciaBcv() {
 
 function guardarHistorialSiCambio(cache) {
   const { binance, binance_compra, bcv } = cache;
+  const cny = Number(cache.cny) > 0 ? Number(cache.cny) : 0;
   if (!binance || !bcv) return;
 
   const now   = new Date();
@@ -782,11 +796,14 @@ function guardarHistorialSiCambio(cache) {
     const same =
       Math.abs((ultimo.binance        || 0) - binance)        < 0.01 &&
       Math.abs((ultimo.binance_compra || 0) - binance_compra) < 0.01 &&
-      Math.abs((ultimo.bcv            || 0) - bcv)            < 0.01;
+      Math.abs((ultimo.bcv            || 0) - bcv)            < 0.01 &&
+      // Sin esto, un cambio del yuan podía tardar hasta una hora en quedar
+      // registrado y el cálculo histórico de ese rato usaría el yuan anterior.
+      Math.abs((ultimo.cny            || 0) - cny)            < 0.0001;
     if (same && now.getTime() - (ultimo.timestamp || 0) < 60 * 60 * 1000) return;
   }
 
-  stmtInsert.run({ timestamp: now.getTime(), fecha, binance, binance_compra, bcv, diff_bs, diff_pct });
+  stmtInsert.run({ timestamp: now.getTime(), fecha, binance, binance_compra, bcv, cny, diff_bs, diff_pct });
 }
 
 // ─── SECCIÓN: CONSULTAS DE HISTORIAL ────────────────────────────────────────
@@ -795,7 +812,7 @@ function queryHistorial({ range, fecha, limit }) {
   const lim = Math.min(limit > 0 ? limit : 5000, MAX_HIST_LIMIT);
 
   if (fecha) {
-    return stmtHistByFecha.all(`%${fecha}%`, MAX_HIST_LIMIT);
+    return stmtHistByFecha.all(`${fecha}%`, lim);
   }
 
   const now = Date.now();
@@ -897,6 +914,9 @@ if (ultimoRegistro) {
   CACHE_TASAS.binance        = ultimoRegistro.binance        || 0;
   CACHE_TASAS.binance_compra = ultimoRegistro.binance_compra || 0;
   CACHE_TASAS.bcv_publicada  = ultimoRegistro.bcv            || 0;
+  // Sin esto, tras un reinicio la app mostraría el yuan estimado (6,53) hasta
+  // que el scraper del BCV volviera a responder.
+  CACHE_TASAS.cny            = ultimoRegistro.cny            || 0;
   const cachedAt = new Date(ultimoRegistro.timestamp).toISOString();
   if (CACHE_TASAS.binance > 0) RATE_SOURCE_STATE.binance.lastSuccessAt = cachedAt;
   if (CACHE_TASAS.bcv_publicada > 0) RATE_SOURCE_STATE.bcv.lastSuccessAt = cachedAt;
@@ -956,6 +976,28 @@ function mapImportQuoteListItem(row) {
     costoPorCajaUSD:   quote.costoPorCajaUSD   ?? null,
     volumenM3:         quote.volumenM3          ?? null,
     pesoKg:            quote.pesoKg             ?? null,
+    productoFotosCount: Array.isArray(quote.productoFotos) ? quote.productoFotos.length : 0,
+    productoFotoPortada: Array.isArray(quote.productoFotos) ? (quote.productoFotos[0] || null) : null,
+    productoLink: quote.productoLink ?? null,
+    precioMercanciaPorUnidadUSD: quote.precioMercanciaPorUnidadUSD ?? null,
+    precioMercanciaPorUnidadCNY: quote.precioMercanciaPorUnidadCNY ?? null,
+    purchasePriceOriginalAmount: quote.purchasePriceOriginalAmount ?? null,
+    purchasePriceOriginalCurrency: quote.purchasePriceOriginalCurrency ?? null,
+    rateSnapshot: quote.rateSnapshot ?? null,
+    dimensionesCm: quote.dimensionesCm ?? null,
+    cajas: quote.cajas ?? null,
+    unidadesPorCaja: quote.unidadesPorCaja ?? null,
+    unidadesTotales: quote.unidadesTotales ?? null,
+    pesoPorCajaKg: quote.pesoPorCajaKg ?? null,
+    tipoCobro: quote.tipoCobro ?? null,
+    costoMercanciaUSD: quote.costoMercanciaUSD ?? null,
+    envioChinaUSD: quote.envioChinaUSD ?? null,
+    plataformaUSD: quote.plataformaUSD ?? null,
+    comisionBancoUSD: quote.comisionBancoUSD ?? null,
+    subtotalUSD: quote.subtotalUSD ?? null,
+    envioInternacionalUSD: quote.envioInternacionalUSD ?? null,
+    feePlataforma: quote.feePlataforma ?? null,
+    feeBanco: quote.feeBanco ?? null,
     // Plan de venta (para badge de ganancia en la lista)
     ventaUnitarioUSD:  quote.ventaUnitarioUSD  ?? null,
     gananciaTotalUSD:  quote.gananciaTotalUSD  ?? null,
@@ -970,15 +1012,16 @@ function mapImportQuoteDetail(row) {
   const empresaNombre = inferEmpresaNombre(quote);
   const tarifaRaw     = quote.empresaTarifaUSD ?? quote.empresaEnvioUSD ?? null;
   const tarifaUSD     = Number.isFinite(Number(tarifaRaw)) ? Number(tarifaRaw) : null;
+  const enriched = ImportCalculation.enrichQuoteWithHistoricalCny({
+    ...quote,
+    empresaNombre: quote.empresaNombre ?? empresaNombre,
+    empresaTarifaUSD: quote.empresaTarifaUSD ?? tarifaUSD,
+  });
   return {
     id: row.id,
     name: row.name,
     createdAt: new Date(row.created_at).toISOString(),
-    quote: {
-      ...quote,
-      empresaNombre: quote.empresaNombre ?? empresaNombre,
-      empresaTarifaUSD: quote.empresaTarifaUSD ?? tarifaUSD,
-    },
+    quote: enriched,
   };
 }
 
@@ -986,7 +1029,17 @@ function mapImportQuoteDetail(row) {
 function prepareIncomingQuote(rawQuote) {
   const result = V.sanitizeImportQuote(rawQuote);
   if (!result.ok) return result;
-  const canonical = ImportCalculation.canonicalizeImportQuote(result.value);
+  const liveCny = Number(CACHE_TASAS.cny);
+  const cnyRate = liveCny > 0 ? liveCny : ImportCalculation.CNY_FALLBACK_RATE;
+  const cnySource = liveCny > 0 ? 'bcv' : 'fallback';
+  // Nunca usar tasa CNY enviada por el cliente.
+  const payload = { ...result.value };
+  delete payload.cnyRateRequested;
+  delete payload.rateSnapshot;
+  const canonical = ImportCalculation.canonicalizeImportQuote(payload, {
+    cnyRate,
+    cnySource,
+  });
   if (!canonical.ok) {
     return {
       ok: false,
@@ -996,11 +1049,12 @@ function prepareIncomingQuote(rawQuote) {
   }
   const quote = canonical.value;
   if (!quote.empresaNombre) quote.empresaNombre = inferEmpresaNombre(quote);
-  const liveCny = Number(CACHE_TASAS.cny);
   quote.rateSnapshot = {
-    cny: liveCny > 0 ? liveCny : 6.53,
-    cnySource: liveCny > 0 ? 'bcv' : 'fallback',
+    ...(quote.rateSnapshot || {}),
+    cny: cnyRate,
+    cnySource,
     capturedAt: new Date().toISOString(),
+    stale: cnySource === 'fallback',
   };
   return { ok: true, value: quote };
 }
@@ -1680,6 +1734,9 @@ app.get('/api/tasas-historicas', tasasLimiter, (req, res, next) => {
 
     const binance = row.binance || 0;
     const diffBs  = binance - bcvVigente;
+    // Snapshots anteriores a la columna `cny` valen 0: en ese caso el cliente
+    // cae al yuan en vivo y lo advierte, en vez de inventar una tasa histórica.
+    const cnyHistorico = Number(row.cny) > 0 ? Number(row.cny) : 0;
 
     res.json({
       consulta: { fecha, hora: hora || null, timestamp: ts },
@@ -1688,6 +1745,7 @@ app.get('/api/tasas-historicas', tasasLimiter, (req, res, next) => {
         binance_compra: row.binance_compra || 0,
         bcv:            bcvVigente,
         bcv_registrada: row.bcv || 0,
+        cny:            cnyHistorico,
       },
       registro: {
         timestamp:   row.timestamp,
@@ -1826,6 +1884,9 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 function broadcastTasas() {
+  // Serializar el payload cuesta CPU y memoria: sin clientes conectados no hay
+  // nada que enviar (el ciclo de Binance llama aquí cada pocos segundos).
+  if (wssTasas.clients.size === 0) return;
   const { binance, binance_compra, bcv, bcv_publicada, cny, bcv_meta } = CACHE_TASAS;
   const sourceStatus = getRateSourceStatus();
   const diff_bs     = binance - bcv;

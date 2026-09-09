@@ -71,6 +71,37 @@
 - Evidencia: baseline local ~76.5 MB RSS bajo PM2; no sustituye medición de 24 h en VPS.
 - Riesgo/rollback: picos no observados localmente; rollback a límites previos mientras se investiga, sin aumentar instancias.
 
+## ADR-010 — Precio de compra CNY/USD v3 aditivo
+
+- Estado: aceptada.
+- Decisión: introducir `purchasePrice { amount, currency }` y
+  `calculationVersion=dayzo-import-v3` de forma aditiva. La conversión CNY→USD
+  ocurre solo en el servidor; USD no se reconvierte. Se persisten original,
+  contraparte, snapshot y equivalentes finales. Lectura v1/v2 se adapta sin
+  migración destructiva.
+- Motivo: trazabilidad monetaria y evitar reinterpretar históricas con tasa actual.
+- Alternativas descartadas: adivinar moneda por magnitud; confiar en tasa del cliente;
+  migración SQL que reescriba cotizaciones.
+- Riesgo/rollback: clientes viejos siguen enviando `precioMercanciaPorUnidadUSD`;
+  el adaptador lo trata como compra USD. Rollback de código conserva JSON v3 legible.
+
+## ADR-011 — Login editorial “Mesa de costos”
+
+- Estado: aceptada.
+- Decisión: sustituir el split SaaS con preview ficticio por composición editorial
+  asimétrica, cadena Producto→CNY/USD→Comisiones→Flete→Costo final con CSS/SVG y
+  tasas públicas, formulario sobrio anclado a la derecha; en móvil el formulario va primero.
+- Motivo: identidad propia sin plantilla generada ni claims técnicos decorativos.
+- Alternativas descartadas: glassmorphism, blobs, stock photos, fake dashboard.
+- Riesgo/rollback: revertir `login.html`/`auth.css`/`auth.js` restaura el layout previo.
+
+## ADR-012 — Flutter local no bloqueado por VPS
+
+- Estado: aceptada (supersede parcialmente ADR-001 respecto al gate remoto).
+- Decisión: completar Flutter localmente aunque el deploy VPS siga bloqueado externo.
+- Motivo: el plan final exige paridad móvil ejecutable sin acceso SSH.
+- Riesgo/rollback: la publicación remota y el keystore siguen siendo bloqueos externos.
+
 ## ADR-009 — Contrato canónico y frescura de tasas
 
 - Estado: aceptada.
@@ -80,3 +111,45 @@
 - Scheduling: Binance usa un solo ciclo recursivo con lock, backoff exponencial y jitter; no `setInterval`.
 - Compatibilidad: aliases y `last_update` permanecen durante web/mobile v1. Clientes nuevos usan nombres canónicos y estados de fuente.
 - Riesgo/rollback: saltos mayores al 50% se rechazan y conservan cache; ante redenominación real se ajusta el umbral mediante cambio revisado, no desactivando validación.
+
+## ADR-013 — El USDT siempre se toma del precio de compra
+
+- Estado: aceptada.
+- Decisión: toda conversión a/desde USDT en la app usa `p2pBuyVesPerUsdt`
+  (`binance`, tradeType BUY). En el cliente hay una sola puerta, `getUsdtRate()`.
+  El precio de venta (`p2pSellVesPerUsdt`, columna legacy `binance_compra`) queda
+  únicamente como dato de mercado en las tarjetas de tasas y en el gráfico.
+- Motivo: antes convivían dos criterios (`binance_compra || binance` en la
+  calculadora y en los equivalentes BCV, `binance` en la brecha y el ticker), así
+  que la misma cotización daba dos números según la pantalla. El precio de compra
+  es además el que refleja lo que cuesta reponer los dólares de la importación.
+- Nota de nomenclatura: la columna `binance_compra` guarda el precio de VENTA. El
+  nombre es histórico y no se renombra para no romper bases existentes; queda
+  documentado en `src/server.js` junto a la sentencia de inserción.
+- Riesgo/rollback: cambiar `getUsdtRate()` revierte el criterio en un punto.
+
+## ADR-014 — Cotizaciones en USDT, dólar BCV y yuan (sin bolívares)
+
+- Estado: aceptada.
+- Decisión: el módulo de importación y el simulador de venta presentan cada monto
+  en tres monedas y en orden fijo: USDT (base del cálculo) → dólar BCV → yuan. Se
+  eliminó el renglón en bolívares y el modo «Precio (Bs.)» del simulador, que pasó
+  a ser «Precio (¥)». La calculadora de divisas sí conserva los bolívares: su
+  función es justamente convertir montos en Bs.
+- Motivo: las cuentas de importación se hacen y se cierran en USDT y yuanes; el
+  bolívar solo añadía una cifra que envejece en minutos.
+- Riesgo/rollback: `crossCurrencies()` en `public/app.js` concentra el formato de
+  la línea secundaria; el modo `priceVes` sigue existiendo en
+  `public/js/sale-calculations.js` por si hiciera falta reponerlo.
+
+## ADR-015 — El yuan se guarda con cada snapshot de tasas
+
+- Estado: aceptada.
+- Decisión: la tabla `tasas` gana una columna aditiva `cny` (yuanes por dólar) que
+  se persiste en cada registro y se devuelve en `/api/tasas-historicas`.
+- Motivo: «calcular con la tasa de otra fecha» mezclaba el USDT y el BCV de esa
+  fecha con el yuan de hoy. Además, tras un reinicio la app mostraba el yuan
+  estimado (6,53) hasta que el scraper del BCV volviera a responder.
+- Compatibilidad: los registros anteriores traen `cny = 0`; en ese caso la
+  calculadora usa el yuan de hoy y lo advierte en el pie, en vez de inventar una
+  tasa histórica.

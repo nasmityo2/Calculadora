@@ -23,11 +23,20 @@
     return Number.isFinite(number) && number >= 0 && number <= max ? number : null;
   }
 
+  /**
+   * Simula una venta. `mode` decide en qué moneda escribes el precio:
+   *   priceUsd → USDT (base de todos los cálculos)
+   *   priceCny → yuanes, convertidos con `cnyPerUsd`
+   *   priceVes → bolívares, convertidos con `vesPerUsd` (compatibilidad)
+   *   roi      → porcentaje de rentabilidad sobre el costo
+   * El resultado siempre sale en USD/USDT; la vista añade BCV y yuanes.
+   */
   function calculateSaleSimulation({
     costUsd,
     inputValue,
     mode = 'priceUsd',
     vesPerUsd = 0,
+    cnyPerUsd = 0,
     count = 1,
   }) {
     const cost = positive(costUsd, LIMITS.costUsd);
@@ -43,6 +52,10 @@
     } else if (mode === 'priceVes') {
       const rate = positive(vesPerUsd, LIMITS.rate);
       if (rate == null) return { ok: false, code: 'INVALID_RATE', message: 'No hay una tasa P2P válida.' };
+      saleUsd = input / rate;
+    } else if (mode === 'priceCny') {
+      const rate = positive(cnyPerUsd, LIMITS.rate);
+      if (rate == null) return { ok: false, code: 'INVALID_CNY_RATE', message: 'No hay una tasa de yuan válida.' };
       saleUsd = input / rate;
     } else if (mode === 'roi') {
       if (input > LIMITS.roiPct) return { ok: false, code: 'ROI_OUT_OF_RANGE', message: 'El ROI supera el máximo permitido.' };
