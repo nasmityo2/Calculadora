@@ -386,7 +386,7 @@
                 <input type="text" id="imp-data" class="c-import-input"
                   placeholder="Ej: 30x30x30 15 50 ¥32,5 · o 30x30x30 15 50 $4.98"
                   autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
-                <p id="imp-quick-hint" class="c-import-hint">Formato: <strong>LxAxA · Peso · Unidades · Precio ¥/$</strong> · [Envío] · [Cajas]. Sin símbolo usa el selector CNY/USD.</p>
+                <p id="imp-quick-hint" class="c-import-hint">Formato: <strong>LxAxA · Peso · Unidades · Precio ¥/$</strong> · [Envío] · [Cajas]. Sin símbolo usa el selector CNY/USD. Las dimensiones aceptan x, *, /, - o . como separador (30x30x30, 30-30-30, 30.30.30…).</p>
                 <p id="imp-quick-error" class="c-import-hint c-import-hint--error" hidden role="alert"></p>
               </div>
             </div>
@@ -471,13 +471,14 @@
               <input type="search" id="import-quotes-search" class="c-quotes-search__input" placeholder="Buscar por nombre…" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Buscar cotización">
             </div>
             <div class="c-quotes-save-row">
-              <div class="c-quotes-save-fields c-auth-only">
+              <div id="import-quote-new-fields" class="c-quotes-save-fields c-auth-only">
                 <input type="text" id="import-quote-name" class="c-quotes-name-input" placeholder="Nombre de la cotización" aria-label="Nombre" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false">
                 <input type="url" id="import-quote-product-link" class="c-quotes-link-input" placeholder="Link del producto (opcional)" aria-label="Link del producto" inputmode="url" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                 <input type="number" id="import-quote-sale-price" class="c-quotes-link-input" placeholder="Precio de venta por unidad (opcional, USD)" aria-label="Precio de venta por unidad" inputmode="decimal" min="0" step="any" autocomplete="off">
                 <div class="c-quote-photo-field">
                   <label for="import-quote-product-photos" class="c-quote-photo-picker"><i class="fas fa-camera"></i> Añadir fotos del producto</label>
                   <input type="file" id="import-quote-product-photos" class="c-quote-photo-input" accept="image/jpeg,image/png,image/webp" multiple>
+                  <p class="c-quote-photo-hint">o haz clic en un campo de arriba y pega una imagen con Ctrl+V</p>
                   <div id="import-quote-product-photos-preview" class="c-quote-photos" aria-live="polite"></div>
                 </div>
               </div>
@@ -535,6 +536,7 @@
                 <div class="c-quote-photo-field c-quote-photo-field--edit">
                   <label for="import-quote-edit-photos" class="c-quote-photo-picker"><i class="fas fa-camera"></i> Agregar fotos</label>
                   <input type="file" id="import-quote-edit-photos" class="c-quote-photo-input" accept="image/jpeg,image/png,image/webp" multiple>
+                  <p class="c-quote-photo-hint">o haz clic en un campo y pega una imagen con Ctrl+V</p>
                   <div id="import-quote-edit-photos-preview" class="c-quote-photos" aria-live="polite"></div>
                 </div>
                 <div class="c-quote-edit__company-row">

@@ -187,7 +187,18 @@ function parseQuickImportLine(line, { defaultCurrency = 'CNY' } = {}) {
   const tokens = clean.split(' ');
   if (tokens.length < 4) return error('INVALID_QUICK_FORMAT', 'Formato: 30x30x30 15 50 32.5cny 4usdt 2');
 
-  const dims = (tokens[0] || '').toLowerCase().split('x');
+  // Las dimensiones pueden llegar como 30x30x30, 30*30*30, 30/30/30 (ya
+  // normalizados arriba), o con guión/punto como separador (30-30-30,
+  // 30.30.30). El punto solo se toma como separador si no hay ya una 'x'
+  // en el token (para no romper decimales tipo 30.5x30x30).
+  let dimsToken = (tokens[0] || '').toLowerCase();
+  if (!dimsToken.includes('x')) {
+    const dashCount = (dimsToken.match(/-/g) || []).length;
+    const dotCount = (dimsToken.match(/\./g) || []).length;
+    if (dashCount === 2) dimsToken = dimsToken.replace(/-/g, 'x');
+    else if (dotCount === 2) dimsToken = dimsToken.replace(/\./g, 'x');
+  }
+  const dims = dimsToken.split('x');
   if (dims.length !== 3) return error('INVALID_DIMENSIONS', 'Las dimensiones deben ser LxAxA.');
   const l = parseLocaleAmount(dims[0]);
   const w = parseLocaleAmount(dims[1]);

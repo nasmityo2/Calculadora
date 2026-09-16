@@ -90,6 +90,28 @@ test('parser rápido produce DTO con purchasePrice', () => {
   assert.equal(g.value.envioChinaPorCajaUSD, null);
 });
 
+test('parser rápido acepta distintos separadores de dimensiones', () => {
+  const esperado = { l: 30, w: 30, h: 30 };
+  for (const linea of [
+    '30x30x30 15 50 32.5cny',
+    '30X30X30 15 50 32.5cny',
+    '30.30.30 15 50 32.5cny',
+    '30-30-30 15 50 32.5cny',
+    '30*30*30 15 50 32.5cny',
+    '30/30/30 15 50 32.5cny',
+    '30\\30\\30 15 50 32.5cny',
+  ]) {
+    const parsed = parseQuickImportLine(linea);
+    assert.equal(parsed.ok, true, `esperaba éxito para "${linea}"`);
+    assert.deepEqual(parsed.value.dimensionesCm, esperado, `dimensiones incorrectas para "${linea}"`);
+  }
+
+  // Un punto decimal dentro de una dimensión (con 'x' explícito) no se confunde con separador.
+  const conDecimal = parseQuickImportLine('30.5x30x30 15 50 32.5cny');
+  assert.equal(conDecimal.ok, true);
+  assert.deepEqual(conDecimal.value.dimensionesCm, { l: 30.5, w: 30, h: 30 });
+});
+
 test('cambio CNY→USD→CNY conserva valor económico', () => {
   const rate = 6.53;
   const usd = convertDisplayedAmount(32.5, 'CNY', 'USD', rate);

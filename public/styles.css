@@ -1803,6 +1803,11 @@ textarea:focus {
   cursor: pointer;
 }
 .c-quote-photo-picker:hover { background: rgba(232,84,26,0.13); }
+.c-quote-photo-hint {
+  font-size: 0.72rem;
+  color: var(--text-soft);
+  margin: 0;
+}
 .c-quote-photo-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .c-quote-photos {
   display: flex;

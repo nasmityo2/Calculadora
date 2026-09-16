@@ -204,7 +204,7 @@ function syncPurchaseCurrencyUI() {
     usdBtn?.setAttribute('aria-pressed', String(purchaseCurrency === 'USD'));
     const hint = document.getElementById('imp-quick-hint');
     if (hint) {
-        hint.innerHTML = `Formato: <strong>LxAxA · Peso · Unidades · Precio (cny/usdt) · Envío (cny/usdt) · Cajas</strong>. Sin moneda en el producto usa <strong>${purchaseCurrency}</strong>; el envío sin moneda usa USDT.`;
+        hint.innerHTML = `Formato: <strong>LxAxA · Peso · Unidades · Precio (cny/usdt) · Envío (cny/usdt) · Cajas</strong>. Sin moneda en el producto usa <strong>${purchaseCurrency}</strong>; el envío sin moneda usa USDT. Las dimensiones aceptan x, *, /, - o . como separador.`;
     }
     const quickInput = document.getElementById('imp-data');
     if (quickInput) quickInput.placeholder = 'Ej: 30x30x30 15 50 32,5cny 4usdt 2';
@@ -3052,6 +3052,8 @@ function setupStaticInteractions() {
     bind('import-quote-edit-custom-rate', 'input', onEmpresaEdicionChange);
     bind('import-quote-product-photos', 'change', (event) => addProductPhotosFromInput(event, importNewQuotePhotos));
     bind('import-quote-edit-photos', 'change', (event) => addProductPhotosFromInput(event, importEditPhotos));
+    bind('import-quote-new-fields', 'paste', (event) => handleProductPhotoPaste(event, importNewQuotePhotos));
+    bind('import-quote-edit-controls', 'paste', (event) => handleProductPhotoPaste(event, importEditPhotos));
     bind('btn-update-import-quote', 'click', actualizarCotizacionImport);
     bind('btn-cancel-import-edit', 'click', cancelarEdicionCotizacionImport);
 
@@ -3539,13 +3541,12 @@ async function compressProductPhoto(file) {
     return blobToDataUrl(blob);
 }
 
-async function addProductPhotosFromInput(event, target) {
-    const files = Array.from(event.target.files || []).slice(0, Math.max(0, 5 - target.length));
-    event.target.value = '';
-    if (!files.length) return;
+async function addProductPhotoFiles(files, target) {
+    const list = Array.from(files || []).slice(0, Math.max(0, 5 - target.length));
+    if (!list.length) return;
     try {
         const photos = [];
-        for (const file of files) photos.push(await compressProductPhoto(file));
+        for (const file of list) photos.push(await compressProductPhoto(file));
         target.push(...photos);
         if (target === importEditPhotos) {
             renderProductPhotoPreview('import-quote-edit-photos-preview', importEditPhotos, { editable: true });
@@ -3557,6 +3558,27 @@ async function addProductPhotosFromInput(event, target) {
     } catch (error) {
         showToast(error.message || 'No se pudo cargar la foto.', 'error');
     }
+}
+
+async function addProductPhotosFromInput(event, target) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    await addProductPhotoFiles(files, target);
+}
+
+function handleProductPhotoPaste(event, target) {
+    const items = event.clipboardData?.items;
+    if (!items || !items.length) return;
+    const files = [];
+    for (const item of items) {
+        if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+            const file = item.getAsFile();
+            if (file) files.push(file);
+        }
+    }
+    if (!files.length) return;
+    event.preventDefault();
+    addProductPhotoFiles(files, target);
 }
 
 function recalcularCotizacionEditada() {
